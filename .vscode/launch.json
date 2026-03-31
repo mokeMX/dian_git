@@ -1,0 +1,37 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ESP-IDF Debug (OpenOCD)",
+            "type": "cppdbg",
+            "request": "launch",
+            "MIMode": "gdb",
+            "miDebuggerPath": "${command:espIdf.getToolchainGdb}",
+            "program": "${workspaceFolder}/build/${command:espIdf.getProjectName}.elf",
+            "windows": {
+                "program": "${workspaceFolder}\\build\\${command:espIdf.getProjectName}.elf"
+            },
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "${config:idf.customExtraPaths}"
+                }
+            ],
+            "setupCommands": [
+                { "text": "target remote :3333" },
+                { "text": "set remotetimeout 20" },
+                { "text": "flushregs" }
+            ],
+            "postRemoteConnectCommands": [
+                { "text": "mon reset halt" },
+                { "text": "thbreak app_main" }, // 调试时自动停在 app_main 入口
+                { "text": "continue" }
+            ],
+            "externalConsole": false,
+            "logging": {
+                "engineLogging": false // 除非调试出问题，否则关闭日志可以减少控制台混乱
+            }
+        }
+    ]
+}

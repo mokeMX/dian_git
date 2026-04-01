@@ -1,21 +1,18 @@
 {
     "C_Cpp.intelliSenseEngine": "default",
-    "idf.adapterTargetName": "esp32s3",
-    "idf.espIdfPathWin": "D:\\Espressif\\frameworks\\esp-idf-v5.4",
-    "idf.toolsPathWin": "D:\\Espressif",
-    "idf.customExtraPaths": "D:\\Espressif\\tools\\xtensa-esp-elf\\esp-14.2.0_20241119\\xtensa-esp-elf\\bin;D:\\Espressif\\tools\\riscv32-esp-elf\\esp-14.2.0_20241119\\riscv32-esp-elf\\bin;D:\\Espressif\\tools\\esp32ulp-elf\\2.38_20240113\\esp32ulp-elf\\bin;D:\\Espressif\\tools\\cmake\\3.30.2\\bin;D:\\Espressif\\tools\\openocd-esp32\\v0.12.0-esp32-20240318\\openocd-esp32\\bin;D:\\Espressif\\tools\\ninja\\1.12.1;D:\\Espressif\\tools\\idf-exe\\1.0.3;D:\\Espressif\\tools\\ccache\\4.10.2;D:\\Espressif\\tools\\dfu-util\\0.11\\dfu-util-0.11-win64;D:\\Espressif\\tools\\esp-rom-elf-patcher\\0.1.1",
-    "idf.customExtraVars": {
-        "OPENOCD_SCRIPTS": "D:\\Espressif\\tools\\openocd-esp32\\v0.12.0-esp32-20240318/openocd-esp32/share/openocd/scripts",
-        "IDF_CCACHE_ENABLE": "1",
-        "IDF_TARGET": "esp32s3"
-    },
-    "idf.pythonBinPathWin": "D:\\Espressif\\python_env\\idf5.4_py3.11_env\\Scripts\\python.exe",
-    "idf.portWin": "COM5",
-    "idf.flashType": "UART",
+    "idf.espIdfPathWin": "d:\\Soft_APP\\ESP_IDF\\master\\esp-idf",
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
+    "idf.toolsPathWin": "d:\\Soft_APP\\ESP_IDF\\tools",
     "files.autoGuessEncoding": true,
-    "idf.buildPathWin": "${workspaceFolder}\\build",
-    "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/"
+    "idf.portWin": "COM5",
+    "idf.flashType": "UART",
+    "idf.port": "/dev/ttyUSB0",
+    "idf.espIdfPath": "/root/esp/v5.4/esp-idf",
+    "idf.toolsPath": "/root/.espressif",
+    "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/",
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32s3"
+    }
 }

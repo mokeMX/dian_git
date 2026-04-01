@@ -1,0 +1,5 @@
+## IDF Component Manager Manifest File
+dependencies:
+  esp-qa/wifi-cmd:
+    version: "0.1.10"
+    override_path: "../../../"

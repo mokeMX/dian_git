@@ -1,10 +1,3 @@
-idf_component_register(
-    SRC_DIRS 
-        "."
-        "APP"
-        "APP/AUDIO"
-    INCLUDE_DIRS 
-        "."
-        "APP"
-        "APP/AUDIO"
-    )
+idf_component_register(SRCS "main.c"
+                    INCLUDE_DIRS "."
+                    ) # 这一行非常重要！

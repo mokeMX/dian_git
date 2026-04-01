@@ -1,10 +1,10 @@
 /**
  ****************************************************************************************************
- * @file        led.h
+ * @file        iic.h
  * @author      正点原子团队(ALIENTEK)
  * @version     V1.0
  * @date        2025-01-01
- * @brief       LED驱动代码
+ * @brief       IIC驱动代码
  * @license     Copyright (c) 2020-2032, 广州市星翼电子科技有限公司
  ****************************************************************************************************
  * @attention
@@ -14,29 +14,27 @@
  * 技术论坛:www.openedv.com
  * 公司网址:www.alientek.com
  * 购买地址:openedv.taobao.com
- * 
+ *
  ****************************************************************************************************
  */
 
-#ifndef __LED_H
-#define __LED_H
+#ifndef __MYIIC_H
+#define __MYIIC_H
 
 #include "driver/gpio.h"
+#include "driver/i2c_master.h"
+#include "esp_err.h"
+#include "esp_log.h"
 
+/* 引脚与相关参数定义 */
+#define IIC_NUM_PORT       I2C_NUM_0        /* IIC0 */
+#define IIC_SPEED_CLK      400000           /* 速率400K */
+#define IIC_SDA_GPIO_PIN   GPIO_NUM_41      /* IIC0_SDA引脚 */
+#define IIC_SCL_GPIO_PIN   GPIO_NUM_42      /* IIC0_SCL引脚 */
 
-/* 引脚定义 */
-#define LED0_GPIO_PIN    GPIO_NUM_1     /* LED0连接的GPIO端口 */
+extern i2c_master_bus_handle_t bus_handle;  /* 总线句柄 */
 
-/* LED0端口定义 */
-#define LED0(x)          do { x ?                                \
-                              gpio_set_level(LED0_GPIO_PIN, 1):  \
-                              gpio_set_level(LED0_GPIO_PIN, 0);  \
-                            } while(0)  /* LED0翻转 */
-
-/* LED取反定义 */
-#define LED0_TOGGLE()    do { gpio_set_level(LED0_GPIO_PIN, !gpio_get_level(LED0_GPIO_PIN)); } while(0)  /* LED0翻转 */
-
-/* 函数声明*/
-void led_init(void);     /* 初始化LED */
+/* 函数声明 */
+esp_err_t myiic_init(void);                 /* 初始化MYIIC */
 
 #endif

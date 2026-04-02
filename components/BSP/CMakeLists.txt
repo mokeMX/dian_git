@@ -4,6 +4,7 @@ set(src_dirs
             MYIIC
             XL9555
             MYSPI
+            MYI2S
             SPILCD)
 
 set(include_dirs
@@ -12,6 +13,7 @@ set(include_dirs
             MYIIC
             XL9555
             MYSPI
+            MYI2S
             SPILCD)
 
 set(requires

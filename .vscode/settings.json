@@ -1,18 +1,18 @@
 {
-    "C_Cpp.intelliSenseEngine": "default",
-    "idf.espIdfPathWin": "d:\\Soft_APP\\ESP_IDF\\master\\esp-idf",
-    "idf.openOcdConfigs": [
-        "board/esp32s3-builtin.cfg"
-    ],
-    "idf.toolsPathWin": "d:\\Soft_APP\\ESP_IDF\\tools",
-    "files.autoGuessEncoding": true,
-    "idf.portWin": "COM5",
-    "idf.flashType": "UART",
-    "idf.port": "/dev/ttyUSB0",
-    "idf.espIdfPath": "/root/esp/v5.4/esp-idf",
-    "idf.toolsPath": "/root/.espressif",
-    "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/",
-    "idf.customExtraVars": {
-        "IDF_TARGET": "esp32s3"
-    }
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.openOcdConfigs": [
+    "board/esp32s3-builtin.cfg"
+  ],
+  "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32s3"
+  },
+  "clangd.path": "D:\\Espressif\\tools\\esp-clang\\esp-18.1.2_20240912\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=d:\\ESP32_S3\\softap_sta1\\build"
+  ],
+  "idf.flashType": "UART",
+  "idf.portWin": "COM5"
 }

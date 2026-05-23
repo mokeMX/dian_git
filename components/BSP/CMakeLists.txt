@@ -7,6 +7,7 @@ set(src_dirs
             SPILCD
             SPI_SD
             ES8388
+            UART
             MYI2S)
 
 set(include_dirs
@@ -18,6 +19,7 @@ set(include_dirs
             SPILCD
             SPI_SD
             ES8388
+            UART
             MYI2S)
 
 set(requires

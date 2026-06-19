@@ -1,0 +1,150 @@
+menu "Autobox sensor hub test"
+
+config SENSOR_HUB_A02YYUW_ENABLE
+    bool "Enable A02YYUW UART ultrasonic test"
+    default y
+
+config SENSOR_HUB_A02YYUW_UART
+    int "A02YYUW UART port"
+    default 1
+    depends on SENSOR_HUB_A02YYUW_ENABLE
+
+config SENSOR_HUB_A02YYUW_RX_GPIO
+    int "A02YYUW ESP32 RX GPIO"
+    default 36
+    depends on SENSOR_HUB_A02YYUW_ENABLE
+
+config SENSOR_HUB_A02YYUW_TX_GPIO
+    int "A02YYUW ESP32 TX GPIO"
+    default 37
+    depends on SENSOR_HUB_A02YYUW_ENABLE
+
+config SENSOR_HUB_A02YYUW_BAUDRATE
+    int "A02YYUW UART baudrate"
+    default 9600
+    depends on SENSOR_HUB_A02YYUW_ENABLE
+
+config SENSOR_HUB_BU_UWB_ENABLE
+    bool "Enable BU03/BU04 passive UART monitor test"
+    default n
+
+config SENSOR_HUB_BU_UWB_UART
+    int "BU03/BU04 UART port"
+    default 1
+    depends on SENSOR_HUB_BU_UWB_ENABLE
+
+config SENSOR_HUB_BU_UWB_RX_GPIO
+    int "BU03/BU04 ESP32 RX GPIO"
+    default 36
+    depends on SENSOR_HUB_BU_UWB_ENABLE
+
+config SENSOR_HUB_BU_UWB_TX_GPIO
+    int "BU03/BU04 ESP32 TX GPIO"
+    default 37
+    depends on SENSOR_HUB_BU_UWB_ENABLE
+
+config SENSOR_HUB_BU_UWB_BAUDRATE
+    int "BU03/BU04 UART baudrate"
+    default 115200
+    depends on SENSOR_HUB_BU_UWB_ENABLE
+
+config SENSOR_HUB_FSR_ENABLE
+    bool "Enable FSR pressure ADC test"
+    default n
+
+config SENSOR_HUB_FSR_ADC_GPIO
+    int "FSR ADC GPIO, used for logs and wiring docs"
+    default 8
+    depends on SENSOR_HUB_FSR_ENABLE
+    help
+        GPIO connected to the FSR voltage divider output. This value is
+        informational for logs; the actual ADC input is selected by
+        SENSOR_HUB_FSR_ADC_CHANNEL.
+
+config SENSOR_HUB_FSR_ADC_CHANNEL
+    int "FSR ADC1 channel"
+    default 7
+    depends on SENSOR_HUB_FSR_ENABLE
+    help
+        ESP32-S3 ADC1 channel connected to the FSR voltage divider output.
+        The board pin table marks IO8 as ADC_IN; on ESP32-S3 it maps to
+        ADC1_CHANNEL_7.
+
+config SENSOR_HUB_I2C_SDA_GPIO
+    int "Shared I2C SDA GPIO"
+    default 38 if SENSOR_HUB_IMU_ENABLE
+    default 39 if SENSOR_HUB_VL53L1X_ENABLE
+    default 38
+    depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
+    help
+        GPIO used as SDA for shared I2C sensors. The original IMU source
+        uses GPIO38 for SDA, while the original VL53L1X source uses GPIO39.
+
+config SENSOR_HUB_I2C_SCL_GPIO
+    int "Shared I2C SCL GPIO"
+    default 37 if SENSOR_HUB_IMU_ENABLE
+    default 38 if SENSOR_HUB_VL53L1X_ENABLE
+    default 37
+    depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
+    help
+        GPIO used as SCL for shared I2C sensors. The original IMU source
+        uses GPIO37 for SCL, while the original VL53L1X source uses GPIO38.
+
+config SENSOR_HUB_I2C_SPEED_HZ
+    int "Shared I2C clock speed"
+    default 400000
+    depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
+
+config SENSOR_HUB_IMU_ADDR
+    hex "IMU 7-bit I2C address"
+    default 0x23
+    depends on SENSOR_HUB_IMU_ENABLE
+
+config SENSOR_HUB_RPLIDAR_ENABLE
+    bool "Enable RPLIDAR C1 test"
+    default n
+
+config SENSOR_HUB_RPLIDAR_UART
+    int "RPLIDAR C1 UART port"
+    default 2
+    depends on SENSOR_HUB_RPLIDAR_ENABLE
+
+config SENSOR_HUB_RPLIDAR_RX_GPIO
+    int "RPLIDAR C1 ESP32 RX GPIO"
+    default 36
+    depends on SENSOR_HUB_RPLIDAR_ENABLE
+
+config SENSOR_HUB_RPLIDAR_TX_GPIO
+    int "RPLIDAR C1 ESP32 TX GPIO"
+    default 37
+    depends on SENSOR_HUB_RPLIDAR_ENABLE
+
+config SENSOR_HUB_RPLIDAR_BAUDRATE
+    int "RPLIDAR C1 UART baudrate"
+    default 460800
+    depends on SENSOR_HUB_RPLIDAR_ENABLE
+
+config SENSOR_HUB_IMU_ENABLE
+    bool "Enable custom I2C IMU test"
+    default n
+
+config SENSOR_HUB_VL53L1X_ENABLE
+    bool "Enable VL53L1X ToF test"
+    default n
+
+config SENSOR_HUB_VL53L1X_ADDR_8BIT
+    hex "VL53L1X 8-bit I2C address"
+    default 0x52
+    depends on SENSOR_HUB_VL53L1X_ENABLE
+
+config SENSOR_HUB_VL53L1X_TIMING_BUDGET_MS
+    int "VL53L1X timing budget in ms"
+    default 50
+    depends on SENSOR_HUB_VL53L1X_ENABLE
+
+config SENSOR_HUB_VL53L1X_INTER_MEASUREMENT_MS
+    int "VL53L1X inter-measurement period in ms"
+    default 55
+    depends on SENSOR_HUB_VL53L1X_ENABLE
+
+endmenu

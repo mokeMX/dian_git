@@ -1,21 +1,14 @@
-/**
- * vl53l1_platform.c
- * ESP32-S3 I2C Platform Implementation
- */
-
 #include "vl53l1_platform.h"
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// 默认使用 I2C_NUM_0，你可以根据项目需求在更高层修改
-#define VL53_I2C_PORT I2C_NUM_0
+extern i2c_master_bus_handle_t bus_handle;
 
 int8_t VL53L1_WriteMulti(uint16_t dev, uint16_t index, uint8_t *pdata, uint32_t count) {
-    // I2C 写入： [寄存器高8位] + [寄存器低8位] + [数据流...]
     uint8_t *buffer = (uint8_t *)malloc(count + 2);
     if (buffer == NULL) return -1;
     
@@ -23,8 +16,7 @@ int8_t VL53L1_WriteMulti(uint16_t dev, uint16_t index, uint8_t *pdata, uint32_t 
     buffer[1] = (uint8_t)(index & 0xFF);
     memcpy(&buffer[2], pdata, count);
     
-    // ESP-IDF 使用 7 位地址，官方传入的 dev 默认是 8 位(0x52)，所以需要 dev >> 1
-    esp_err_t err = i2c_master_write_to_device(VL53_I2C_PORT, dev >> 1, buffer, count + 2, pdMS_TO_TICKS(100));
+    esp_err_t err = i2c_master_write_to_device(bus_handle, dev >> 1, buffer, count + 2, pdMS_TO_TICKS(100));
     free(buffer);
     
     return (err == ESP_OK) ? 0 : -1;
@@ -35,7 +27,7 @@ int8_t VL53L1_ReadMulti(uint16_t dev, uint16_t index, uint8_t *pdata, uint32_t c
     reg[0] = (uint8_t)(index >> 8);
     reg[1] = (uint8_t)(index & 0xFF);
     
-    esp_err_t err = i2c_master_write_read_device(VL53_I2C_PORT, dev >> 1, reg, 2, pdata, count, pdMS_TO_TICKS(100));
+    esp_err_t err = i2c_master_write_read_device(bus_handle, dev >> 1, reg, 2, pdata, count, pdMS_TO_TICKS(100));
     return (err == ESP_OK) ? 0 : -1;
 }
 

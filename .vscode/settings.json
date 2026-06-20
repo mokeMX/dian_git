@@ -16,6 +16,12 @@
     "board/esp32s3-builtin.cfg"
   ],
   "files.autoGuessEncoding": true,
+  "files.associations": {
+    "sdkconfig.h": "c",
+    "i2c_master.h": "c",
+    "ti_msp_dl_config.h": "c",
+    "i2c_module.h": "c"
+  },
   "idf.buildPathWin": "${workspaceFolder}\\build",
   "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/",
   "clangd.path": "D:\\Espressif\\tools\\esp-clang\\esp-18.1.2_20240912\\esp-clang\\bin\\clangd.exe",

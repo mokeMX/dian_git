@@ -1,7 +1,6 @@
 idf_component_register(
-    SRCS "IIC.c"
+    SRCS "main.c"
     SRC_DIRS
-        "."
         "APP"
         "APP/AUDIO"
     INCLUDE_DIRS

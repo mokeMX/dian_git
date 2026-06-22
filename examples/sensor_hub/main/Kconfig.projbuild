@@ -1,22 +1,32 @@
 menu "Autobox sensor hub test"
 
 config SENSOR_HUB_A02YYUW_ENABLE
-    bool "Enable A02YYUW UART ultrasonic test"
+    bool "Enable A02YYUW ultrasonic test"
     default y
 
-config SENSOR_HUB_A02YYUW_UART
-    int "A02YYUW UART port"
-    default 1
+config SENSOR_HUB_A02YYUW_USE_SW_UART
+    bool "Use software (GPIO bit-bang) UART for A02YYUW"
+    default y
     depends on SENSOR_HUB_A02YYUW_ENABLE
+    help
+        When enabled, A02YYUW uses GPIO timer-based software UART instead of
+        a hardware UART port. This frees hardware UARTs for higher-baud sensors.
+        A02YYUW only needs 9600 baud and simple 4-byte frames, making it
+        ideal for software serial.
+
+config SENSOR_HUB_A02YYUW_UART
+    int "A02YYUW hardware UART port"
+    default 1
+    depends on SENSOR_HUB_A02YYUW_ENABLE && !SENSOR_HUB_A02YYUW_USE_SW_UART
 
 config SENSOR_HUB_A02YYUW_RX_GPIO
     int "A02YYUW ESP32 RX GPIO"
-    default 36
+    default 4
     depends on SENSOR_HUB_A02YYUW_ENABLE
 
 config SENSOR_HUB_A02YYUW_TX_GPIO
     int "A02YYUW ESP32 TX GPIO"
-    default 37
+    default 5
     depends on SENSOR_HUB_A02YYUW_ENABLE
 
 config SENSOR_HUB_A02YYUW_BAUDRATE
@@ -35,12 +45,12 @@ config SENSOR_HUB_BU_UWB_UART
 
 config SENSOR_HUB_BU_UWB_RX_GPIO
     int "BU03/BU04 ESP32 RX GPIO"
-    default 36
+    default 6
     depends on SENSOR_HUB_BU_UWB_ENABLE
 
 config SENSOR_HUB_BU_UWB_TX_GPIO
     int "BU03/BU04 ESP32 TX GPIO"
-    default 37
+    default 7
     depends on SENSOR_HUB_BU_UWB_ENABLE
 
 config SENSOR_HUB_BU_UWB_BAUDRATE
@@ -72,23 +82,21 @@ config SENSOR_HUB_FSR_ADC_CHANNEL
 
 config SENSOR_HUB_I2C_SDA_GPIO
     int "Shared I2C SDA GPIO"
-    default 38 if SENSOR_HUB_IMU_ENABLE
-    default 39 if SENSOR_HUB_VL53L1X_ENABLE
-    default 38
+    default 11
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
     help
-        GPIO used as SDA for shared I2C sensors. The original IMU source
-        uses GPIO38 for SDA, while the original VL53L1X source uses GPIO39.
+        GPIO used as SDA for shared I2C sensors. Uses a dedicated, conflict-free
+        pin instead of the original GPIO38/GPIO39 defaults to avoid collision
+        with other peripherals.
 
 config SENSOR_HUB_I2C_SCL_GPIO
     int "Shared I2C SCL GPIO"
-    default 37 if SENSOR_HUB_IMU_ENABLE
-    default 38 if SENSOR_HUB_VL53L1X_ENABLE
-    default 37
+    default 12
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
     help
-        GPIO used as SCL for shared I2C sensors. The original IMU source
-        uses GPIO37 for SCL, while the original VL53L1X source uses GPIO38.
+        GPIO used as SCL for shared I2C sensors. Uses a dedicated, conflict-free
+        pin instead of the original GPIO37/GPIO38 defaults to avoid collision
+        with UART and other I2C pins.
 
 config SENSOR_HUB_I2C_SPEED_HZ
     int "Shared I2C clock speed"
@@ -111,12 +119,12 @@ config SENSOR_HUB_RPLIDAR_UART
 
 config SENSOR_HUB_RPLIDAR_RX_GPIO
     int "RPLIDAR C1 ESP32 RX GPIO"
-    default 36
+    default 17
     depends on SENSOR_HUB_RPLIDAR_ENABLE
 
 config SENSOR_HUB_RPLIDAR_TX_GPIO
     int "RPLIDAR C1 ESP32 TX GPIO"
-    default 37
+    default 18
     depends on SENSOR_HUB_RPLIDAR_ENABLE
 
 config SENSOR_HUB_RPLIDAR_BAUDRATE

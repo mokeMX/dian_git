@@ -7,6 +7,7 @@
 #ifdef ESP_PLATFORM
 #include "driver/uart.h"
 #include "esp_err.h"
+#include "sw_uart.h"
 #else
 typedef int esp_err_t;
 #define ESP_OK 0
@@ -33,6 +34,7 @@ typedef struct {
     int rx_gpio;
     int baudrate;
     int rx_buffer_size;
+    bool use_sw_uart;
 } a02yyuw_config_t;
 
 typedef struct {

@@ -129,6 +129,9 @@ void app_main(void)
         CONFIG_SENSOR_HUB_A02YYUW_RX_GPIO,
         CONFIG_SENSOR_HUB_A02YYUW_TX_GPIO);
     a02_cfg.baudrate = CONFIG_SENSOR_HUB_A02YYUW_BAUDRATE;
+#ifdef CONFIG_SENSOR_HUB_A02YYUW_USE_SW_UART
+    a02_cfg.use_sw_uart = true;
+#endif
     print_status("a02yyuw", a02yyuw_init(&a02_cfg));
 #endif
 

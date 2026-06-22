@@ -10,6 +10,8 @@
 static const char *TAG = "a02yyuw";
 static a02yyuw_config_t s_config;
 static bool s_initialized;
+static bool s_use_sw_uart;
+static sw_uart_t s_sw_uart;
 #endif
 
 a02yyuw_config_t a02yyuw_default_config(uart_port_t uart_port,
@@ -22,6 +24,7 @@ a02yyuw_config_t a02yyuw_default_config(uart_port_t uart_port,
         .rx_gpio = rx_gpio,
         .baudrate = A02YYUW_DEFAULT_BAUDRATE,
         .rx_buffer_size = A02YYUW_DEFAULT_RX_BUF_SIZE,
+        .use_sw_uart = false,
     };
     return config;
 }
@@ -96,6 +99,22 @@ esp_err_t a02yyuw_init(const a02yyuw_config_t *config)
         s_config.rx_buffer_size = A02YYUW_DEFAULT_RX_BUF_SIZE;
     }
 
+    s_use_sw_uart = config->use_sw_uart;
+
+    if (s_use_sw_uart) {
+        sw_uart_config_t sw_cfg = sw_uart_default_config(
+            s_config.rx_gpio, s_config.tx_gpio);
+        sw_cfg.baudrate = s_config.baudrate;
+        esp_err_t ret = sw_uart_init(&s_sw_uart, &sw_cfg);
+        if (ret == ESP_OK) {
+            s_initialized = true;
+            ESP_LOGI(TAG, "SW-UART RX=GPIO%d baud=%d",
+                     s_config.rx_gpio,
+                     s_config.baudrate);
+        }
+        return ret;
+    }
+
     const uart_config_t uart_config = {
         .baud_rate = s_config.baudrate,
         .data_bits = UART_DATA_8_BITS,
@@ -154,10 +173,17 @@ esp_err_t a02yyuw_read(a02yyuw_reading_t *out, uint32_t wait_ms)
     }
 
     uint8_t buf[128] = {0};
-    const int len = uart_read_bytes(s_config.uart_port,
-                                    buf,
-                                    sizeof(buf),
-                                    pdMS_TO_TICKS(50));
+    int len;
+
+    if (s_use_sw_uart) {
+        len = sw_uart_read_bytes(&s_sw_uart, buf, sizeof(buf), 50);
+    } else {
+        len = uart_read_bytes(s_config.uart_port,
+                              buf,
+                              sizeof(buf),
+                              pdMS_TO_TICKS(50));
+    }
+
     if (len < 4) {
         return ESP_ERR_TIMEOUT;
     }
@@ -168,7 +194,11 @@ esp_err_t a02yyuw_read(a02yyuw_reading_t *out, uint32_t wait_ms)
 void a02yyuw_deinit(void)
 {
     if (s_initialized) {
-        uart_driver_delete(s_config.uart_port);
+        if (s_use_sw_uart) {
+            sw_uart_deinit(&s_sw_uart);
+        } else {
+            uart_driver_delete(s_config.uart_port);
+        }
         s_initialized = false;
     }
 }

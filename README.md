@@ -1,49 +1,67 @@
-﻿# Autobox Sensor Driver
+﻿# 传感器整合 (Sensor Driver Hub)
 
-ESP-IDF 6.1 / ESP32-S3 传感器驱动整理工程。当前已整理并完成单模块硬件测试的传感器：
+六传感器驱动统一框架项目，提供标准化的传感器驱动接口和 menuconfig 配置系统。
 
-- A02YYUW UART 超声波测距
-- BU03/BU04 UWB PDOA/TWR 测距定位输出
-- FSR 薄膜压力传感器 ADC 输入
-- RPLIDAR C1 UART 激光雷达
-- 自定义 I2C IMU 模块
-- VL53L1X ToF 测距模块
+## 支持的传感器
 
-驱动组件位于 `components/sensors/`，测试工程位于 `examples/sensor_hub/`。每个驱动都通过 `*_config_t` 注入 UART/I2C/ADC 参数；未来主算法工程只需要把对应 component 加入 `EXTRA_COMPONENT_DIRS` 或复制到工程 `components/` 下，即可 include 头文件并初始化使用。
+| 传感器 | 类型 | 接口 | 功能 |
+|--------|------|------|------|
+| A02YYUW | 超声波测距 | UART | 毫米级距离测量（最大 4.5m） |
+| BU03/BU04 | UWB 超宽带 | UART | 高精度室内定位（PDOA / TWR） |
+| FSR | 薄膜压力 | ADC | 压力检测（模拟量转力值） |
+| RPLIDAR C1 | 激光雷达 | UART | 360° 二维激光扫描 |
+| IMU | 九轴惯性 | I2C | 加速度/陀螺/磁力计/欧拉角/气压 |
+| VL53L1X | ToF 激光测距 | I2C | 毫米级距离测量（最大 4m） |
 
-## 快速构建
+## 特性
+
+- **模块化设计**: 每个传感器独立的驱动组件，位于 `components/sensors/`
+- **menuconfig 配置**: 通过 Kconfig 菜单启用/禁用传感器、配置引脚
+- **统一传感器中心**: `examples/sensor_hub/` 示例程序统一初始化所有已启用的传感器
+- **完整文档**: `docs/sensors/` 包含驱动使用说明、引脚接线图、测试流程
+
+## 硬件连接
+
+详见 `docs/sensors/pinout-and-wiring.md`
+
+> **注意**: 此分支存在引脚冲突（GPIO36/37 被多个传感器共享），建议使用 `传感器整合修改` 分支
+
+## 构建与烧录
 
 ```bash
-cd /home/sp/auto-box/sensor-driver/examples/sensor_hub
-source /home/sp/esp/esp-idf/export.sh
+cd examples/sensor_hub
 idf.py set-target esp32s3
-idf.py menuconfig
+idf.py menuconfig   # 选择要启用的传感器
 idf.py build
-idf.py -p /dev/ttyUSB0 flash monitor
+idf.py flash monitor
 ```
 
-`menuconfig` 路径：`Autobox sensor hub test`。在这里选择要测试的模块，并配置 UART 端口、GPIO、波特率、I2C 地址、I2C 速率等参数。
+## 测试
 
-## 文档
-
-- [驱动接入与 API 使用](docs/sensors/driver-usage.md)
-- [引脚与接线建议](docs/sensors/pinout-and-wiring.md)
-- [测试流程](docs/sensors/test-flow.md)
-- [模块审查结论](docs/sensors/module-review.md)
-
-## 验证
-
-主机侧协议解析测试：
+项目包含 PC 端协议测试脚本：
 
 ```bash
-cd /home/sp/auto-box/sensor-driver
-bash tests/protocol/run_tests.sh
+cd tests/protocol
+python a02yyuw_test.py       # A02YYUW 协议测试
+python bu_uwb_test.py        # BU UWB 协议测试
+python fsr_adc_test.py       # FSR ADC 测试
 ```
 
-ESP-IDF 构建：
+## 目录结构
 
-```bash
-cd /home/sp/auto-box/sensor-driver/examples/sensor_hub
-source /home/sp/esp/esp-idf/export.sh
-idf.py build
+```
+├── components/sensors/
+│   ├── a02yyuw/               # A02YYUW 超声波驱动
+│   ├── bu_uwb/                # BU03/BU04 UWB 驱动
+│   ├── fsr_adc/               # FSR 压力传感器驱动
+│   ├── imu_i2c/               # I2C 九轴 IMU 驱动
+│   ├── rplidar_c1/            # RPLIDAR C1 驱动
+│   └── vl53l1x_tof/           # VL53L1X ToF 驱动
+├── examples/sensor_hub/
+│   └── main/
+│       ├── main.c             # 传感器中心示例程序
+│       └── Kconfig.projbuild  # menuconfig 配置菜单
+├── docs/sensors/              # 驱动使用文档
+├── tests/protocol/            # PC 端协议测试
+└── AGENTS.md                  # 工作区指南
 ```

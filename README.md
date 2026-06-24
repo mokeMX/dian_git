@@ -2,6 +2,26 @@
 
 `传感器整合` 分支的改进版本，解决了所有 GPIO 引脚冲突，新增软件 UART 驱动，六传感器可同时运行。
 
+## 智能跟随与避障（算法1）
+
+在传感器驱动之上新增了一套**跟随 + 避障**算法，把 UWB（跟随目标）、激光雷达
+（前向障碍）、双超声波（近距兜底）、IMU、差速底盘整合为一台智能跟随行李箱：
+
+- `components/control/chassis/`：后轴差速底盘驱动，`(v, ω)` → 左右轮 PWM（TB6612/DRV8833 类）。
+- `components/control/follow_avoid/`：纯 C 算法，UWB 跟随 + VFH-lite 避障 + 速度调速器 +
+  超声波急停 + 状态机（IDLE/SEARCH/FOLLOW/AVOID/ESTOP），可在 PC 上单元测试。
+- `examples/follow_robot/`：整机示例，各传感器独立任务 + 50 Hz 控制循环。
+- 设计、坐标系、接线与调参详见 **[docs/algorithm/follow-and-avoidance.md](docs/algorithm/follow-and-avoidance.md)**。
+
+```bash
+cd examples/follow_robot
+idf.py set-target esp32s3
+idf.py menuconfig          # 配置电机引脚、车距、避障阈值
+idf.py build flash monitor
+
+bash tests/algorithm/run_tests.sh   # 算法 PC 单元测试（无需硬件）
+```
+
 ## 修订记录
 
 - **传感器修改4**：新增**第二个 A02YYUW 超声波**支持，两个超声波各占一路独立 UART、互不冲突。

@@ -1,0 +1,179 @@
+menu "Follow-me suitcase (follow + obstacle avoidance)"
+
+comment "--- Drive motors (rear differential drive, TB6612/DRV8833 style) ---"
+
+config FOLLOW_ROBOT_MOTOR_LEFT_PWM_GPIO
+    int "Left motor PWM (PWMA) GPIO"
+    default 4
+    help
+        PWM/speed pin of the rear-LEFT motor channel.
+        NOTE: assign all six motor pins to GPIOs that are actually FREE on your
+        board. On the ATK-DNESP32S3 most pins are taken by LCD/camera/I2S/SPI;
+        a motor-driver expansion board or a dedicated control MCU is expected.
+
+config FOLLOW_ROBOT_MOTOR_LEFT_IN1_GPIO
+    int "Left motor direction IN1 (AIN1) GPIO"
+    default 5
+
+config FOLLOW_ROBOT_MOTOR_LEFT_IN2_GPIO
+    int "Left motor direction IN2 (AIN2) GPIO"
+    default 6
+
+config FOLLOW_ROBOT_MOTOR_LEFT_INVERT
+    bool "Invert left motor direction"
+    default n
+
+config FOLLOW_ROBOT_MOTOR_RIGHT_PWM_GPIO
+    int "Right motor PWM (PWMB) GPIO"
+    default 7
+
+config FOLLOW_ROBOT_MOTOR_RIGHT_IN1_GPIO
+    int "Right motor direction IN1 (BIN1) GPIO"
+    default 15
+
+config FOLLOW_ROBOT_MOTOR_RIGHT_IN2_GPIO
+    int "Right motor direction IN2 (BIN2) GPIO"
+    default 16
+
+config FOLLOW_ROBOT_MOTOR_RIGHT_INVERT
+    bool "Invert right motor direction"
+    default n
+
+config FOLLOW_ROBOT_PWM_FREQ_HZ
+    int "Motor PWM frequency (Hz)"
+    default 20000
+
+config FOLLOW_ROBOT_MIN_DUTY_PCT
+    int "Motor dead-zone duty (%) - smallest duty that makes the wheel turn"
+    default 12
+
+config FOLLOW_ROBOT_MAX_DUTY_PCT
+    int "Motor max duty (%) - top speed / current limit"
+    default 90
+
+config FOLLOW_ROBOT_TRACK_WIDTH_MM
+    int "Track width: distance between the two rear wheels (mm)"
+    default 300
+
+config FOLLOW_ROBOT_MAX_WHEEL_SPEED_MMPS
+    int "Wheel linear speed at full duty (mm/s) - open-loop calibration"
+    default 800
+
+comment "--- Follow behaviour ---"
+
+config FOLLOW_ROBOT_FOLLOW_DISTANCE_MM
+    int "Desired standoff distance behind the user (mm)"
+    default 1000
+
+config FOLLOW_ROBOT_STOP_BAND_MM
+    int "Stop band below standoff where the robot holds still (mm)"
+    default 250
+
+config FOLLOW_ROBOT_MAX_LINEAR_MMPS
+    int "Max follow linear speed (mm/s)"
+    default 700
+
+config FOLLOW_ROBOT_MAX_ANGULAR_MRADPS
+    int "Max yaw rate (milli-rad/s)"
+    default 1600
+
+comment "--- Obstacle avoidance ---"
+
+config FOLLOW_ROBOT_EMERGENCY_DIST_MM
+    int "Emergency-stop distance, front cone / ultrasonic (mm)"
+    default 350
+
+config FOLLOW_ROBOT_SLOW_DIST_MM
+    int "Start slowing down below this front clearance (mm)"
+    default 1200
+
+config FOLLOW_ROBOT_SAFE_DIST_MM
+    int "A lidar sector closer than this counts as blocked (mm)"
+    default 600
+
+config FOLLOW_ROBOT_ROBOT_HALF_WIDTH_MM
+    int "Half of the chassis width, used to widen blocked sectors (mm)"
+    default 220
+
+config FOLLOW_ROBOT_LIDAR_FORWARD_DEG
+    int "Lidar raw angle that points to robot FORWARD (deg)"
+    default 0
+    help
+        The RPLIDAR reports angles relative to its own zero mark. Set this to
+        the raw lidar angle that aligns with the robot's forward (+x) axis.
+
+config FOLLOW_ROBOT_LIDAR_CW
+    bool "Lidar angle increases clockwise (RPLIDAR default)"
+    default y
+    help
+        RPLIDAR C1 measures angle clockwise looking down. Enable so the driver
+        flips it into the robot's counter-clockwise-positive convention.
+
+comment "--- UWB tag -> follow target mapping ---"
+
+config FOLLOW_ROBOT_UWB_LEFT_IS_POS_X
+    bool "UWB Xcm positive means user is to the LEFT"
+    default n
+    help
+        The BU0x TWR frame reports Xcm (lateral) and Ycm (forward). If your kit
+        maps +Xcm to the user's RIGHT, leave this disabled; enable it if +Xcm is
+        to the LEFT. Used to build the follow bearing.
+
+comment "--- Sensor wiring (mirrors the sensor_hub example defaults) ---"
+
+config FOLLOW_ROBOT_UWB_UART
+    int "BU UWB UART port"
+    default 1
+config FOLLOW_ROBOT_UWB_RX_GPIO
+    int "BU UWB ESP RX GPIO"
+    default 18
+config FOLLOW_ROBOT_UWB_TX_GPIO
+    int "BU UWB ESP TX GPIO"
+    default 8
+config FOLLOW_ROBOT_UWB_BAUD
+    int "BU UWB baudrate"
+    default 115200
+
+config FOLLOW_ROBOT_LIDAR_UART
+    int "RPLIDAR UART port"
+    default 2
+config FOLLOW_ROBOT_LIDAR_RX_GPIO
+    int "RPLIDAR ESP RX GPIO"
+    default 17
+config FOLLOW_ROBOT_LIDAR_TX_GPIO
+    int "RPLIDAR ESP TX GPIO"
+    default 9
+config FOLLOW_ROBOT_LIDAR_BAUD
+    int "RPLIDAR baudrate"
+    default 460800
+
+# Both ultrasonics use the per-instance software (bit-bang) UART: the two
+# hardware UARTs are taken by UWB and the lidar. A02YYUW is 9600 baud, RX-only.
+config FOLLOW_ROBOT_ULTRA_LEFT_RX_GPIO
+    int "Front-left ultrasonic (A02YYUW) RX GPIO (SW UART)"
+    default 35
+config FOLLOW_ROBOT_ULTRA_RIGHT_RX_GPIO
+    int "Front-right ultrasonic (A02YYUW) RX GPIO (SW UART)"
+    default 36
+
+config FOLLOW_ROBOT_IMU_ENABLE
+    bool "Read IMU yaw for telemetry / heading hold"
+    default y
+config FOLLOW_ROBOT_I2C_SDA_GPIO
+    int "IMU I2C SDA GPIO"
+    default 11
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+config FOLLOW_ROBOT_I2C_SCL_GPIO
+    int "IMU I2C SCL GPIO"
+    default 12
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+config FOLLOW_ROBOT_IMU_ADDR
+    hex "IMU 7-bit I2C address"
+    default 0x23
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+
+config FOLLOW_ROBOT_CONTROL_HZ
+    int "Control loop frequency (Hz)"
+    default 50
+
+endmenu

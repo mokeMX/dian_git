@@ -47,6 +47,7 @@ typedef struct sw_uart_inst {
     volatile uint8_t current_byte;
     volatile int bit_count;
     esp_timer_handle_t timer;
+    uint32_t bit_us;
     uint32_t half_bit_us;
     bool initialized;
 } sw_uart_t;

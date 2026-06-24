@@ -8,12 +8,14 @@
 
 原版存在 GPIO36/37 被 3-4 个传感器共享的问题。此版本完全解决了所有冲突：
 
-| 传感器 | 接口 | 原版引脚 | 修复后引脚 |
+下表中的“修复后引脚”与 `examples/sensor_hub/main/Kconfig.projbuild` 的默认值保持一致，可在 `menuconfig` 中修改：
+
+| 传感器 | 接口 | 原版引脚 | 修复后引脚（Kconfig 默认值） |
 |--------|------|----------|------------|
-| A02YYUW | SW UART | GPIO37(RX) | SW_RX=GPIO38 |
-| BU UWB | UART1 | GPIO36(RX), GPIO37(TX) | GPIO13(RX), GPIO14(TX) |
-| FSR | ADC | GPIO36 | GPIO15 |
-| RPLIDAR | UART2 | GPIO17(TX), GPIO18(RX) | GPIO17(TX), GPIO18(RX) |
+| A02YYUW | SW UART | GPIO37(RX) | SW_RX=GPIO4 |
+| BU UWB | UART1 | GPIO36(RX), GPIO37(TX) | RX=GPIO6, TX=GPIO7 |
+| FSR | ADC | GPIO36 | GPIO8 (ADC1_CH7) |
+| RPLIDAR | UART2 | GPIO17(TX), GPIO18(RX) | ESP_RX=GPIO17, ESP_TX=GPIO18 |
 | IMU | I2C | SCL=42, SDA=41 | SCL=12, SDA=11 |
 | VL53L1X | I2C | 共用 IMU 总线 | SCL=12, SDA=11 (共存) |
 
@@ -55,12 +57,13 @@ idf.py flash monitor
 
 ## 测试
 
+协议解析层（A02YYUW / BU UWB / FSR）提供 PC 端单元测试，使用 gcc 编译运行，无需硬件：
+
 ```bash
-cd tests/protocol
-python a02yyuw_test.py       # A02YYUW 协议测试
-python bu_uwb_test.py        # BU UWB 协议测试
-python fsr_adc_test.py       # FSR ADC 测试
+bash tests/protocol/run_tests.sh
 ```
+
+测试源码见 `tests/protocol/test_sensor_parsers.c`。
 
 ## 目录结构
 

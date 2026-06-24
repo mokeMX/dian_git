@@ -9,7 +9,7 @@
 
 static const char *TAG = "sw_uart";
 
-static void sw_uart_schedule_next(sw_uart_t *uart);
+static void sw_uart_schedule_next(sw_uart_t *uart, uint32_t delay_us);
 
 static void sw_uart_timer_cb(void *arg)
 {
@@ -22,7 +22,9 @@ static void sw_uart_timer_cb(void *arg)
             uart->current_byte = 0;
             uart->bit_count = 0;
             uart->state = SW_UART_DATA;
-            sw_uart_schedule_next(uart);
+            /* From the centre of the start bit, the centre of data bit 0 is
+             * one full bit period away (not a half bit). */
+            sw_uart_schedule_next(uart, uart->bit_us);
         } else {
             uart->state = SW_UART_IDLE;
             gpio_intr_enable(uart->rx_gpio);
@@ -38,7 +40,9 @@ static void sw_uart_timer_cb(void *arg)
         if (uart->bit_count >= 8) {
             uart->state = SW_UART_STOP;
         }
-        sw_uart_schedule_next(uart);
+        /* Each subsequent sample is one full bit period later so we always
+         * sample at the centre of each bit. */
+        sw_uart_schedule_next(uart, uart->bit_us);
         break;
 
     case SW_UART_STOP:
@@ -63,11 +67,11 @@ static void sw_uart_timer_cb(void *arg)
     }
 }
 
-static void sw_uart_schedule_next(sw_uart_t *uart)
+static void sw_uart_schedule_next(sw_uart_t *uart, uint32_t delay_us)
 {
-    esp_timer_stop(uart->timer);
-    int64_t now = esp_timer_get_time();
-    esp_timer_start_once(uart->timer, uart->half_bit_us);
+    /* The one-shot timer has already fired (we run from its callback), so it
+     * is no longer armed and can simply be started again. */
+    esp_timer_start_once(uart->timer, delay_us);
 }
 
 static void IRAM_ATTR sw_uart_gpio_isr(void *arg)
@@ -106,7 +110,11 @@ esp_err_t sw_uart_init(sw_uart_t *uart, const sw_uart_config_t *config)
     uart->tx_gpio = config->tx_gpio;
     uart->baudrate = config->baudrate > 0 ? config->baudrate : 9600;
     uart->state = SW_UART_IDLE;
-    uart->half_bit_us = 500000 / uart->baudrate;
+    uart->bit_us = 1000000 / uart->baudrate;
+    if (uart->bit_us < 1) {
+        uart->bit_us = 1;
+    }
+    uart->half_bit_us = uart->bit_us / 2;
     if (uart->half_bit_us < 1) {
         uart->half_bit_us = 1;
     }

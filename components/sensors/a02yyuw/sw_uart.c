@@ -1,5 +1,7 @@
 #include "sw_uart.h"
 
+#include <string.h>   /* memset */
+
 #ifdef ESP_PLATFORM
 #include "driver/gpio.h"
 #include "esp_log.h"

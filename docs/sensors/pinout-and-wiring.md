@@ -2,12 +2,26 @@
 
 依据 `DNESP32-S3 IO引脚分配表.xlsx`、`DNESP32S3 V1.0 硬件参考手册.pdf` 和原理图文本整理。
 
+## 开发板真实可用引脚（重要）
+
+依据 `DNESP32-S3 IO引脚分配表.xlsx`，ATK-DNESP32S3 上**只有 IO35 / IO36 / IO37 三个 GPIO 被标记为「完全独立」**（不接任何板载外设，可随意使用）。其余所有 IO 均已被 RGB-LCD、摄像头(OV)、I2S 音频、SPI2、IIC0(触摸/IIC)、USB、UART0 控制台占用。因此本分支把两个超声波传感器放在这三个空闲引脚上，绝不与板载外设抢占引脚。
+
+| 引脚 | 板载占用 | 本项目用途 |
+|---|---|---|
+| IO35 | 完全独立 | 超声波 #1 RX（硬件 UART1） |
+| IO36 | 完全独立 | 超声波 #2 RX（软件 UART） |
+| IO37 | 完全独立 | 预留（备用 RX / 第三传感器） |
+
+> 注：原 `传感器修改3` 等分支默认的 GPIO4/5/6/7/8/11/12/17/18 在本开发板上实际被 LCD/摄像头/I2S/SPI/IIC0 占用，仅在不使用这些板载外设时才可借用。若你的硬件确实空出了那些引脚，可在 `menuconfig` 中改回。
+
 ## 推荐默认引脚
 
 | 用途 | 默认 GPIO | 依据与说明 |
 |---|---|---|
-| A02YYUW SW-UART RX | GPIO4 | 软件串口 9600 baud，引脚空闲无冲突；通过 `SENSOR_HUB_A02YYUW_RX_GPIO` 可改 |
-| A02YYUW SW-UART TX | GPIO5 | 软件串口，A02YYUW 为自主输出模式，TX 可悬空；通过 `SENSOR_HUB_A02YYUW_TX_GPIO` 可改 |
+| A02YYUW #1 RX | GPIO35 | 硬件 UART1 @ 9600 baud，板载完全独立引脚；通过 `SENSOR_HUB_A02YYUW_RX_GPIO` 可改 |
+| A02YYUW #1 TX | -1（不接） | A02YYUW 自主输出，ESP 仅需 RX；如需控制再分配，置 `SENSOR_HUB_A02YYUW_TX_GPIO` |
+| A02YYUW #2 RX | GPIO36 | 软件串口 9600 baud，板载完全独立引脚；通过 `SENSOR_HUB_A02YYUW2_RX_GPIO` 可改 |
+| A02YYUW #2 TX | -1（不接） | 同上，通过 `SENSOR_HUB_A02YYUW2_TX_GPIO` 可改 |
 | BU UWB UART1 RX | GPIO6 | 硬件 UART1 @ 115200 baud；通过 `SENSOR_HUB_BU_UWB_RX_GPIO` 可改 |
 | BU UWB UART1 TX | GPIO7 | 硬件 UART1；通过 `SENSOR_HUB_BU_UWB_TX_GPIO` 可改 |
 | RPLIDAR C1 UART2 RX | GPIO17 | 硬件 UART2 @ 460800 baud，原始源码默认引脚；通过 `SENSOR_HUB_RPLIDAR_RX_GPIO` 可改 |
@@ -27,20 +41,36 @@
 | GPIO38 | IMU SDA, VL53L1X SCL | 统一共享 I2C 总线→GPIO11(SDA), GPIO12(SCL) |
 | UART1 | A02YYUW 和 BU UWB 共用 UART1 | A02YYUW 改用软件串口(GPIO 模拟)，BU UWB 独占 UART1 |
 
-## A02YYUW 软件串口超声波
+## 双 A02YYUW 超声波（两路 UART，引脚不冲突）
 
-A02YYUW 仅需 9600 baud 且每帧只有 4 字节，适合使用 GPIO 位检测软件串口。
-通过 `SENSOR_HUB_A02YYUW_USE_SW_UART=y` 启用（默认开启），使用 gptimer 定时器
-+ GPIO 中断精确采样 RX 信号。如需使用硬件 UART，关闭该选项即可。
+本项目支持**两个 A02YYUW 超声波同时工作**，每个传感器独占一路 UART、一个 RX 引脚：
 
-| A02YYUW | ESP32-S3 |
-|---|---|
-| VCC | 3.3V 或 5V，优先按模块实物标称供电 |
-| GND | GND |
-| TX | GPIO4，ESP32 RX（软件串口输入） |
-| RX | GPIO5，ESP32 TX；可悬空/拉高保持稳定输出模式 |
+- **超声波 #1 → 硬件 UART1，RX=IO35**
+- **超声波 #2 → 软件 UART（GPIO 位检测），RX=IO36**
 
-默认配置：软件串口 `9600 8N1`、`RX=GPIO4`、`TX=GPIO5`。
+为什么一路硬件一路软件？ESP32-S3 除去作控制台的 UART0，只剩 UART1、UART2 两个硬件 UART。把第二个超声波放到软件 UART，可以把宝贵的 UART2 让给高波特率传感器（如 RPLIDAR 460800 baud），同时仍满足「两个超声波 = 两路独立 UART」。软件 UART 用 `esp_timer` 高精度定时 + GPIO 边沿中断在位中心采样，对 9600 baud / 4 字节帧完全够用。两路软件 UART 也可并存（各自独立的定时器与 GPIO 中断），需要时把 #1 也切到软件 UART 即可。
+
+A02YYUW 为自主输出模式，上电后持续从其 TX 脚发送 4 字节距离帧，**ESP 端只需接 RX**，因此每个传感器只占用一个引脚，TX 默认置 -1 不接。
+
+| A02YYUW #1 | ESP32-S3 | 说明 |
+|---|---|---|
+| VCC | 3.3V 或 5V | 按模块实物标称供电 |
+| GND | GND | 必须与 ESP32 共地 |
+| TX（模块输出） | **IO35**（ESP RX） | 硬件 UART1 输入 |
+| RX（模块输入） | 不接 | A02YYUW 自主输出，无需控制 |
+
+| A02YYUW #2 | ESP32-S3 | 说明 |
+|---|---|---|
+| VCC | 3.3V 或 5V | 按模块实物标称供电 |
+| GND | GND | 必须与 ESP32 共地 |
+| TX（模块输出） | **IO36**（ESP RX） | 软件 UART 输入 |
+| RX（模块输入） | 不接 | A02YYUW 自主输出，无需控制 |
+
+默认配置：
+- #1：硬件 `UART1`，`9600 8N1`，`RX=IO35`，`TX=-1`
+- #2：软件 UART，`9600 8N1`，`RX=IO36`，`TX=-1`
+
+相关 Kconfig：`SENSOR_HUB_A02YYUW_*`（#1）与 `SENSOR_HUB_A02YYUW2_*`（#2），可在 `menuconfig` 中分别启用/改引脚/切换软硬件 UART。
 
 ## BU03/BU04 UWB
 

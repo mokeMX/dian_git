@@ -124,6 +124,7 @@ void app_main(void)
 #endif
 
 #if CONFIG_SENSOR_HUB_A02YYUW_ENABLE
+    static a02yyuw_t a02_1;
     a02yyuw_config_t a02_cfg = a02yyuw_default_config(
         (uart_port_t)CONFIG_SENSOR_HUB_A02YYUW_UART,
         CONFIG_SENSOR_HUB_A02YYUW_RX_GPIO,
@@ -132,7 +133,30 @@ void app_main(void)
 #ifdef CONFIG_SENSOR_HUB_A02YYUW_USE_SW_UART
     a02_cfg.use_sw_uart = true;
 #endif
-    print_status("a02yyuw", a02yyuw_init(&a02_cfg));
+    print_status("a02yyuw#1", a02yyuw_init_dev(&a02_1, &a02_cfg));
+    printf("[A02YYUW#1] %s%d RX=GPIO%d baud=%d\n",
+           a02_cfg.use_sw_uart ? "SW-UART" : "HW-UART",
+           a02_cfg.use_sw_uart ? 0 : CONFIG_SENSOR_HUB_A02YYUW_UART,
+           CONFIG_SENSOR_HUB_A02YYUW_RX_GPIO,
+           a02_cfg.baudrate);
+#endif
+
+#if CONFIG_SENSOR_HUB_A02YYUW2_ENABLE
+    static a02yyuw_t a02_2;
+    a02yyuw_config_t a02b_cfg = a02yyuw_default_config(
+        (uart_port_t)CONFIG_SENSOR_HUB_A02YYUW2_UART,
+        CONFIG_SENSOR_HUB_A02YYUW2_RX_GPIO,
+        CONFIG_SENSOR_HUB_A02YYUW2_TX_GPIO);
+    a02b_cfg.baudrate = CONFIG_SENSOR_HUB_A02YYUW2_BAUDRATE;
+#ifdef CONFIG_SENSOR_HUB_A02YYUW2_USE_SW_UART
+    a02b_cfg.use_sw_uart = true;
+#endif
+    print_status("a02yyuw#2", a02yyuw_init_dev(&a02_2, &a02b_cfg));
+    printf("[A02YYUW#2] %s%d RX=GPIO%d baud=%d\n",
+           a02b_cfg.use_sw_uart ? "SW-UART" : "HW-UART",
+           a02b_cfg.use_sw_uart ? 0 : CONFIG_SENSOR_HUB_A02YYUW2_UART,
+           CONFIG_SENSOR_HUB_A02YYUW2_RX_GPIO,
+           a02b_cfg.baudrate);
 #endif
 
 #if CONFIG_SENSOR_HUB_BU_UWB_ENABLE
@@ -247,10 +271,21 @@ void app_main(void)
     while (1) {
 #if CONFIG_SENSOR_HUB_A02YYUW_ENABLE
         a02yyuw_reading_t a02 = {0};
-        if (a02yyuw_read(&a02, 150) == ESP_OK && a02.valid) {
-            printf("[A02YYUW] distance=%d mm\n", a02.distance_mm);
+        if (a02yyuw_read_dev(&a02_1, &a02, 150) == ESP_OK && a02.valid) {
+            printf("[A02YYUW#1] distance=%d mm\n", a02.distance_mm);
         } else {
-            printf("[A02YYUW] no valid frame\n");
+            printf("[A02YYUW#1] no valid frame (RX=GPIO%d)\n",
+                   CONFIG_SENSOR_HUB_A02YYUW_RX_GPIO);
+        }
+#endif
+
+#if CONFIG_SENSOR_HUB_A02YYUW2_ENABLE
+        a02yyuw_reading_t a02b = {0};
+        if (a02yyuw_read_dev(&a02_2, &a02b, 150) == ESP_OK && a02b.valid) {
+            printf("[A02YYUW#2] distance=%d mm\n", a02b.distance_mm);
+        } else {
+            printf("[A02YYUW#2] no valid frame (RX=GPIO%d)\n",
+                   CONFIG_SENSOR_HUB_A02YYUW2_RX_GPIO);
         }
 #endif
 

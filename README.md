@@ -4,6 +4,10 @@
 
 ## 修订记录
 
+- **传感器修改4**：新增**第二个 A02YYUW 超声波**支持，两个超声波各占一路独立 UART、互不冲突。
+  - 依据 `DNESP32-S3 IO引脚分配表.xlsx` 核对 ATK-DNESP32S3 引脚：全板**只有 IO35 / IO36 / IO37 为「完全独立」**可用引脚，其余均被 RGB-LCD / 摄像头 / I2S / SPI2 / IIC0 / USB / UART0 占用。两个超声波改用这组真正空闲的引脚：**#1 = IO35，#2 = IO36**（IO37 预留）。
+  - `a02yyuw` 驱动重构为**句柄式多实例 API**（`a02yyuw_init_dev/read_dev/deinit_dev`），可同时驱动多个超声波；保留原单实例 API 作向后兼容。
+  - 遵循「不复用引脚、引脚/硬件不够就用软件 IO 模拟」原则：**#1 走硬件 UART1，#2 走软件 UART（GPIO 位检测）**，把 UART2 留给高波特率传感器。A02YYUW 为自主输出，ESP 端仅需 RX，TX 默认 -1 不接，每个传感器仅占 1 个引脚。
 - **传感器修改3**：在 ESP32-S3 / ESP-IDF v5.4 实际编译中发现并修复 `a02yyuw` 组件的两处编译问题——`sw_uart.c` 补充 `#include <string.h>`（使用了 `memset`）；`CMakeLists.txt` 的 `REQUIRES` 补上 `esp_driver_gpio`（依赖 `driver/gpio.h`）。修复后该组件可干净通过编译。
 - **传感器修改2**：修复软件 UART 采样时序错误——原实现每位只前进半个位周期，导致数据位采样点错位、收到字节错乱；改为起始位中心对齐后按整位周期采样。同时校正 README 引脚表与测试说明。
 
@@ -17,7 +21,8 @@
 
 | 传感器 | 接口 | 原版引脚 | 修复后引脚（Kconfig 默认值） |
 |--------|------|----------|------------|
-| A02YYUW | SW UART | GPIO37(RX) | SW_RX=GPIO4 |
+| A02YYUW #1 | HW UART1 | GPIO37(RX) | RX=GPIO35（板载完全独立引脚） |
+| A02YYUW #2 | SW UART | 无 | RX=GPIO36（板载完全独立引脚） |
 | BU UWB | UART1 | GPIO36(RX), GPIO37(TX) | RX=GPIO6, TX=GPIO7 |
 | FSR | ADC | GPIO36 | GPIO8 (ADC1_CH7) |
 | RPLIDAR | UART2 | GPIO17(TX), GPIO18(RX) | ESP_RX=GPIO17, ESP_TX=GPIO18 |
@@ -36,7 +41,8 @@
 
 | 传感器 | 类型 | 接口 | 功能 |
 |--------|------|------|------|
-| A02YYUW | 超声波测距 | SW UART | 毫米级距离测量（最大 4.5m） |
+| A02YYUW #1 | 超声波测距 | HW UART1 (RX=IO35) | 毫米级距离测量（最大 4.5m） |
+| A02YYUW #2 | 超声波测距 | SW UART (RX=IO36) | 毫米级距离测量（最大 4.5m），软件串口 |
 | BU03/BU04 | UWB 超宽带 | UART1 | 高精度室内定位（PDOA / TWR） |
 | FSR | 薄膜压力 | ADC1 | 压力检测（模拟量转力值） |
 | RPLIDAR C1 | 激光雷达 | UART2 | 360° 二维激光扫描 |
@@ -77,7 +83,7 @@ bash tests/protocol/run_tests.sh
 ```
 ├── components/sensors/
 │   ├── a02yyuw/
-│   │   ├── a02yyuw.c/h         # A02YYUW 驱动（支持硬件/软件 UART 双模式）
+│   │   ├── a02yyuw.c/h         # A02YYUW 驱动（硬件/软件 UART 双模式 + 句柄式多实例）
 │   │   ├── sw_uart.c/h         # 软件 UART 驱动（GPIO 位时序）
 │   │   └── CMakeLists.txt      # 含 esp_timer / esp_driver_gpio / esp_driver_uart 依赖
 │   ├── bu_uwb/                 # BU03/BU04 UWB 驱动
@@ -87,7 +93,7 @@ bash tests/protocol/run_tests.sh
 │   └── vl53l1x_tof/            # VL53L1X ToF 驱动
 ├── examples/sensor_hub/
 │   └── main/
-│       ├── main.c              # 传感器中心示例（使用 SW UART 初始化 A02YYUW）
+│       ├── main.c              # 传感器中心示例（初始化两个 A02YYUW：#1 硬件UART1 / #2 软件UART）
 │       ├── Kconfig.projbuild   # menuconfig 配置菜单
 │       └── sdkconfig.defaults  # 默认引脚配置
 ├── docs/sensors/

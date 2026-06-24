@@ -8,10 +8,8 @@
 
 #ifdef ESP_PLATFORM
 static const char *TAG = "a02yyuw";
-static a02yyuw_config_t s_config;
-static bool s_initialized;
-static bool s_use_sw_uart;
-static sw_uart_t s_sw_uart;
+/* Backing device for the legacy single-instance API. */
+static a02yyuw_t s_singleton;
 #endif
 
 a02yyuw_config_t a02yyuw_default_config(uart_port_t uart_port,
@@ -85,38 +83,39 @@ bool a02yyuw_parse_latest(const uint8_t *buf,
 }
 
 #ifdef ESP_PLATFORM
-esp_err_t a02yyuw_init(const a02yyuw_config_t *config)
+esp_err_t a02yyuw_init_dev(a02yyuw_t *dev, const a02yyuw_config_t *config)
 {
-    if (config == NULL || config->rx_gpio < 0) {
+    if (dev == NULL || config == NULL || config->rx_gpio < 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    s_config = *config;
-    if (s_config.baudrate <= 0) {
-        s_config.baudrate = A02YYUW_DEFAULT_BAUDRATE;
+    dev->config = *config;
+    if (dev->config.baudrate <= 0) {
+        dev->config.baudrate = A02YYUW_DEFAULT_BAUDRATE;
     }
-    if (s_config.rx_buffer_size <= 0) {
-        s_config.rx_buffer_size = A02YYUW_DEFAULT_RX_BUF_SIZE;
+    if (dev->config.rx_buffer_size <= 0) {
+        dev->config.rx_buffer_size = A02YYUW_DEFAULT_RX_BUF_SIZE;
     }
 
-    s_use_sw_uart = config->use_sw_uart;
+    dev->use_sw_uart = config->use_sw_uart;
+    dev->initialized = false;
 
-    if (s_use_sw_uart) {
+    if (dev->use_sw_uart) {
         sw_uart_config_t sw_cfg = sw_uart_default_config(
-            s_config.rx_gpio, s_config.tx_gpio);
-        sw_cfg.baudrate = s_config.baudrate;
-        esp_err_t ret = sw_uart_init(&s_sw_uart, &sw_cfg);
+            dev->config.rx_gpio, dev->config.tx_gpio);
+        sw_cfg.baudrate = dev->config.baudrate;
+        esp_err_t ret = sw_uart_init(&dev->sw_uart, &sw_cfg);
         if (ret == ESP_OK) {
-            s_initialized = true;
+            dev->initialized = true;
             ESP_LOGI(TAG, "SW-UART RX=GPIO%d baud=%d",
-                     s_config.rx_gpio,
-                     s_config.baudrate);
+                     dev->config.rx_gpio,
+                     dev->config.baudrate);
         }
         return ret;
     }
 
     const uart_config_t uart_config = {
-        .baud_rate = s_config.baudrate,
+        .baud_rate = dev->config.baudrate,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -124,47 +123,52 @@ esp_err_t a02yyuw_init(const a02yyuw_config_t *config)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    esp_err_t ret = uart_param_config(s_config.uart_port, &uart_config);
+    esp_err_t ret = uart_param_config(dev->config.uart_port, &uart_config);
     if (ret != ESP_OK) {
         return ret;
     }
 
-    ret = uart_set_pin(s_config.uart_port,
-                       s_config.tx_gpio,
-                       s_config.rx_gpio,
+    /* A02YYUW is transmit-only; leave the ESP TX line unrouted when tx_gpio<0. */
+    const int tx_pin = dev->config.tx_gpio < 0 ? UART_PIN_NO_CHANGE
+                                               : dev->config.tx_gpio;
+    ret = uart_set_pin(dev->config.uart_port,
+                       tx_pin,
+                       dev->config.rx_gpio,
                        UART_PIN_NO_CHANGE,
                        UART_PIN_NO_CHANGE);
     if (ret != ESP_OK) {
         return ret;
     }
 
-    ret = uart_driver_install(s_config.uart_port,
-                              s_config.rx_buffer_size,
+    ret = uart_driver_install(dev->config.uart_port,
+                              dev->config.rx_buffer_size,
                               0,
                               0,
                               NULL,
                               0);
     if (ret == ESP_OK || ret == ESP_ERR_INVALID_STATE) {
-        s_initialized = true;
+        dev->initialized = true;
         ESP_LOGI(TAG, "UART%d RX=GPIO%d TX=GPIO%d baud=%d",
-                 s_config.uart_port,
-                 s_config.rx_gpio,
-                 s_config.tx_gpio,
-                 s_config.baudrate);
+                 dev->config.uart_port,
+                 dev->config.rx_gpio,
+                 dev->config.tx_gpio,
+                 dev->config.baudrate);
         return ESP_OK;
     }
     return ret;
 }
 
-esp_err_t a02yyuw_read(a02yyuw_reading_t *out, uint32_t wait_ms)
+esp_err_t a02yyuw_read_dev(a02yyuw_t *dev,
+                           a02yyuw_reading_t *out,
+                           uint32_t wait_ms)
 {
-    if (out == NULL) {
+    if (dev == NULL || out == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
     out->distance_mm = 0;
     out->valid = false;
 
-    if (!s_initialized) {
+    if (!dev->initialized) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -175,10 +179,10 @@ esp_err_t a02yyuw_read(a02yyuw_reading_t *out, uint32_t wait_ms)
     uint8_t buf[128] = {0};
     int len;
 
-    if (s_use_sw_uart) {
-        len = sw_uart_read_bytes(&s_sw_uart, buf, sizeof(buf), 50);
+    if (dev->use_sw_uart) {
+        len = sw_uart_read_bytes(&dev->sw_uart, buf, sizeof(buf), 50);
     } else {
-        len = uart_read_bytes(s_config.uart_port,
+        len = uart_read_bytes(dev->config.uart_port,
                               buf,
                               sizeof(buf),
                               pdMS_TO_TICKS(50));
@@ -191,16 +195,33 @@ esp_err_t a02yyuw_read(a02yyuw_reading_t *out, uint32_t wait_ms)
     return a02yyuw_parse_latest(buf, (size_t)len, out) ? ESP_OK : ESP_ERR_INVALID_CRC;
 }
 
+void a02yyuw_deinit_dev(a02yyuw_t *dev)
+{
+    if (dev == NULL || !dev->initialized) {
+        return;
+    }
+    if (dev->use_sw_uart) {
+        sw_uart_deinit(&dev->sw_uart);
+    } else {
+        uart_driver_delete(dev->config.uart_port);
+    }
+    dev->initialized = false;
+}
+
+/* Legacy single-instance API: thin wrappers over the static backing device. */
+esp_err_t a02yyuw_init(const a02yyuw_config_t *config)
+{
+    return a02yyuw_init_dev(&s_singleton, config);
+}
+
+esp_err_t a02yyuw_read(a02yyuw_reading_t *out, uint32_t wait_ms)
+{
+    return a02yyuw_read_dev(&s_singleton, out, wait_ms);
+}
+
 void a02yyuw_deinit(void)
 {
-    if (s_initialized) {
-        if (s_use_sw_uart) {
-            sw_uart_deinit(&s_sw_uart);
-        } else {
-            uart_driver_delete(s_config.uart_port);
-        }
-        s_initialized = false;
-    }
+    a02yyuw_deinit_dev(&s_singleton);
 }
 #else
 esp_err_t a02yyuw_init(const a02yyuw_config_t *config)

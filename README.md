@@ -2,6 +2,11 @@
 
 `传感器整合` 分支的改进版本，解决了所有 GPIO 引脚冲突，新增软件 UART 驱动，六传感器可同时运行。
 
+## 修订记录
+
+- **传感器修改3**：在 ESP32-S3 / ESP-IDF v5.4 实际编译中发现并修复 `a02yyuw` 组件的两处编译问题——`sw_uart.c` 补充 `#include <string.h>`（使用了 `memset`）；`CMakeLists.txt` 的 `REQUIRES` 补上 `esp_driver_gpio`（依赖 `driver/gpio.h`）。修复后该组件可干净通过编译。
+- **传感器修改2**：修复软件 UART 采样时序错误——原实现每位只前进半个位周期，导致数据位采样点错位、收到字节错乱；改为起始位中心对齐后按整位周期采样。同时校正 README 引脚表与测试说明。
+
 ## 相比原版的改进
 
 ### 引脚冲突修复
@@ -24,7 +29,7 @@
 为 A02YYUW 超声波传感器实现了 GPIO 软件串口（`components/sensors/a02yyuw/sw_uart.c`）：
 - 基于 `esp_timer` 高精度定时器和 GPIO 边沿中断
 - 支持接收模式，最高 115200 波特率（针对 A02YYUW 的 9600 baud 优化）
-- 起始位下降沿检测 + 半位宽中心采样
+- 起始位下降沿检测：先用半位延时对齐到起始位中心，其后每个数据位按整位周期在位中心采样
 - 1024 字节环形缓冲区
 
 ## 支持的传感器
@@ -55,6 +60,8 @@ idf.py build
 idf.py flash monitor
 ```
 
+> 各传感器组件已在 ESP-IDF v5.4 + ESP32-S3 上编译验证通过。
+
 ## 测试
 
 协议解析层（A02YYUW / BU UWB / FSR）提供 PC 端单元测试，使用 gcc 编译运行，无需硬件：
@@ -72,7 +79,7 @@ bash tests/protocol/run_tests.sh
 │   ├── a02yyuw/
 │   │   ├── a02yyuw.c/h         # A02YYUW 驱动（支持硬件/软件 UART 双模式）
 │   │   ├── sw_uart.c/h         # 软件 UART 驱动（GPIO 位时序）
-│   │   └── CMakeLists.txt      # 含 esp_timer 依赖
+│   │   └── CMakeLists.txt      # 含 esp_timer / esp_driver_gpio / esp_driver_uart 依赖
 │   ├── bu_uwb/                 # BU03/BU04 UWB 驱动
 │   ├── fsr_adc/                # FSR 压力传感器驱动
 │   ├── imu_i2c/                # I2C 九轴 IMU 驱动

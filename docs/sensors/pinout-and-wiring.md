@@ -30,8 +30,10 @@
 ## A02YYUW 软件串口超声波
 
 A02YYUW 仅需 9600 baud 且每帧只有 4 字节，适合使用 GPIO 位检测软件串口。
-通过 `SENSOR_HUB_A02YYUW_USE_SW_UART=y` 启用（默认开启），使用 gptimer 定时器
-+ GPIO 中断精确采样 RX 信号。如需使用硬件 UART，关闭该选项即可。
+通过 `SENSOR_HUB_A02YYUW_USE_SW_UART=y` 启用（默认开启），使用 **`esp_timer`** 高精度定时器
++ GPIO 中断采样 RX 信号。如需使用硬件 UART，关闭该选项即可。
+
+> ⚠️ 本分支（传感器整合修改）的 `sw_uart.c` 采样时序每位只前进半个位周期，可能导致字节错乱；该问题在 `传感器修改2` 修复。另外 `sw_uart.c` 缺 `#include <string.h>`、组件 `REQUIRES` 缺 `esp_driver_gpio`，在 `传感器修改3` 才补齐。实际使用建议用 `传感器修改3/4` 分支。
 
 | A02YYUW | ESP32-S3 |
 |---|---|

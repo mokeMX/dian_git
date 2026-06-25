@@ -59,6 +59,75 @@ static void test_diff_drive_saturation(void)
     assert(l > 0.0f && l < r);
 }
 
+/* ------------------------------------------------------------ wheel PID (算法2) */
+
+static void mk_pid(chassis_pid_t *pid, float kp, float ki, float kd, float lim)
+{
+    memset(pid, 0, sizeof(*pid));
+    pid->kp = kp;
+    pid->ki = ki;
+    pid->kd = kd;
+    pid->out_min = -lim;
+    pid->out_max = lim;
+    chassis_pid_reset(pid);
+}
+
+static void test_pid_sign_and_clamp(void)
+{
+    chassis_pid_t pid;
+    mk_pid(&pid, 1000.0f, 0.0f, 0.0f, 400.0f);
+    /* P-only, error = +1 -> kp*err = 1000, clamped to out_max. */
+    assert(approx(chassis_pid_step(&pid, 1.0f, 0.0f, 0.02f), 400.0f, 1e-3f));
+    mk_pid(&pid, 1000.0f, 0.0f, 0.0f, 400.0f);
+    assert(approx(chassis_pid_step(&pid, 0.0f, 1.0f, 0.02f), -400.0f, 1e-3f));
+}
+
+static void test_pid_integrator_antiwindup(void)
+{
+    chassis_pid_t pid;
+    mk_pid(&pid, 0.0f, 500.0f, 0.0f, 400.0f);
+    float out = 0.0f;
+    for (int i = 0; i < 1000; ++i) {
+        out = chassis_pid_step(&pid, 1.0f, 0.0f, 0.02f); /* constant error */
+    }
+    /* I-only term must saturate at the limit, never beyond it. */
+    assert(out <= 400.0f + 1e-3f);
+    assert(approx(out, 400.0f, 1e-2f));
+}
+
+/* Closed-loop: feed-forward + PID against a simple first-order wheel model must
+ * converge to the speed set-point (proves the integral kills the FF mismatch). */
+static void test_pid_closed_loop_converges(void)
+{
+    chassis_pid_t pid;
+    mk_pid(&pid, 200.0f, 300.0f, 5.0f, 400.0f);
+    const float ff = 625.0f;        /* us per m/s feed-forward */
+    const float plant_g = 0.0012f;  /* m/s per us (motor weaker than FF assumes) */
+    const float beta = 0.3f;        /* first-order lag */
+    const float ts = 0.5f;          /* target wheel speed (m/s) */
+    const float dt = 0.02f;
+
+    float meas = 0.0f;
+    for (int i = 0; i < 800; ++i) {
+        const float total = ff * ts + chassis_pid_step(&pid, ts, meas, dt);
+        meas += (plant_g * total - meas) * beta;
+    }
+    assert(approx(meas, ts, 0.02f)); /* tracks the set-point despite FF error */
+}
+
+static void test_pid_reset_clears_state(void)
+{
+    chassis_pid_t pid;
+    mk_pid(&pid, 0.0f, 500.0f, 0.0f, 400.0f);
+    for (int i = 0; i < 50; ++i) {
+        chassis_pid_step(&pid, 1.0f, 0.0f, 0.02f);
+    }
+    assert(pid.i_term > 1.0f);
+    chassis_pid_reset(&pid);
+    assert(approx(pid.i_term, 0.0f, 1e-6f));
+    assert(!pid.has_prev);
+}
+
 /* ------------------------------------------------------------ obstacle field */
 
 static void test_obstacle_field(void)
@@ -180,6 +249,10 @@ int main(void)
     test_diff_drive_straight();
     test_diff_drive_pivot();
     test_diff_drive_saturation();
+    test_pid_sign_and_clamp();
+    test_pid_integrator_antiwindup();
+    test_pid_closed_loop_converges();
+    test_pid_reset_clears_state();
     test_obstacle_field();
     test_follow_straight();
     test_follow_turns_toward_target();

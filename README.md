@@ -2,28 +2,38 @@
 
 `传感器整合` 分支的改进版本，解决了所有 GPIO 引脚冲突，新增软件 UART 驱动，六传感器可同时运行。
 
-## 智能跟随与避障（算法1）
+## 智能跟随与避障（算法2 · 闭环版）
 
 在传感器驱动之上新增了一套**跟随 + 避障**算法，把 UWB（跟随目标）、激光雷达
-（前向障碍）、双超声波（近距兜底）、IMU、差速底盘整合为一台智能跟随行李箱：
+（前向障碍）、双超声波（近距兜底）、IMU、差速底盘整合为一台智能跟随行李箱。
 
-- `components/control/chassis/`：后轴差速底盘驱动，`(v, ω)` → 左右轮 PWM（TB6612/DRV8833 类）。
+> **算法2 相比算法1**：底盘从「H 桥 + 开环占空比」改成**你真实的硬件 —— APO-DL 电调 +
+> RC 航模 PWM 驱动**，并用 **AB 正交编码器做轮速 PID 闭环**、用 **IMU 做航向闭环**，
+> 指令 `(v, ω)` 会被实际跟踪而非开环估计。上层「跟随 + VFH 避障 + 状态机」沿用算法1。
+
+- `components/control/chassis/`：**闭环**后轴差速底盘——电调 RC-PWM 输出 + AB 编码器轮速 PID +
+  前馈 + 失效保护 + 里程计；`(v, ω)` → `chassis_set_velocity()` / `chassis_update()`。
 - `components/control/follow_avoid/`：纯 C 算法，UWB 跟随 + VFH-lite 避障 + 速度调速器 +
   超声波急停 + 状态机（IDLE/SEARCH/FOLLOW/AVOID/ESTOP），可在 PC 上单元测试。
-- `examples/follow_robot/`：整机示例，各传感器独立任务 + 50 Hz 控制循环。
+- `examples/follow_robot/`：整机示例，各传感器独立任务 + 50 Hz 控制循环 + IMU 航向闭环。
 - 设计、坐标系、接线与调参详见 **[docs/algorithm/follow-and-avoidance.md](docs/algorithm/follow-and-avoidance.md)**。
 
 ```bash
 cd examples/follow_robot
 idf.py set-target esp32s3
-idf.py menuconfig          # 配置电机引脚、车距、避障阈值
+idf.py menuconfig          # 配置电调/编码器引脚、TICKS_PER_METER、车距、避障阈值、PID
 idf.py build flash monitor
 
-bash tests/algorithm/run_tests.sh   # 算法 PC 单元测试（无需硬件）
+bash tests/algorithm/run_tests.sh   # 算法 + 轮速 PID PC 单元测试（无需硬件）
 ```
 
 ## 修订记录
 
+- **算法2**：跟随+避障**闭环版**。底盘改对接真实硬件 **APO-DL 电调（RC PWM，50 Hz/1500 µs 中位）+ AB 正交编码器**，
+  新增**每轮速度 PID 闭环**（前馈 + 抗积分饱和 + 测量微分 + 斜率限幅 + 失效保护 + 里程计），控制循环新增 **IMU 航向闭环**
+  （算法 ω 作前馈、IMU 偏航误差修正）。上层 VFH 跟随避障与状态机沿用算法1，并补充轮速 PID 的 PC 单元测试。
+  引脚与 `动力轮代码` 对齐：电调 GPIO4/5、编码器 GPIO6/7 与 GPIO15/16。
+- **算法1**：在传感器之上首次实现跟随 + VFH-lite 避障 + 状态机（开环 H 桥底盘假设）。
 - **传感器修改4**：新增**第二个 A02YYUW 超声波**支持，两个超声波各占一路独立 UART、互不冲突。
   - 依据 `DNESP32-S3 IO引脚分配表.xlsx` 核对 ATK-DNESP32S3 引脚：全板**只有 IO35 / IO36 / IO37 为「完全独立」**可用引脚，其余均被 RGB-LCD / 摄像头 / I2S / SPI2 / IIC0 / USB / UART0 占用。两个超声波改用这组真正空闲的引脚：**#1 = IO35，#2 = IO36**（IO37 预留）。
   - `a02yyuw` 驱动重构为**句柄式多实例 API**（`a02yyuw_init_dev/read_dev/deinit_dev`），可同时驱动多个超声波；保留原单实例 API 作向后兼容。

@@ -1,18 +1,24 @@
 /*
- * follow_robot - smart follow-me suitcase with obstacle avoidance.
+ * follow_robot (算法2) - smart follow-me suitcase with CLOSED-LOOP drive.
  *
  * Wiring of the sensing/acting stack:
  *   UWB (BU0x)      -> follow target  (range + bearing to the user's tag)
  *   RPLIDAR C1      -> obstacle field (front 180 deg polar histogram)
  *   2x A02YYUW      -> front-corner near-field safety (ultrasonic)
- *   IMU             -> yaw telemetry (optional, heading hold hook)
- *   chassis         -> rear differential drive (front wheels are casters)
+ *   IMU             -> heading closed-loop (yaw error trims the turn command)
+ *   chassis         -> rear diff-drive: APO-DL ESC (RC PWM) + AB encoder PID
+ *
+ * Difference vs 算法1: the chassis is now closed-loop. It drives the real ESCs
+ * with RC servo pulses and runs a per-wheel PID on the AB encoders, and the
+ * control loop closes a heading loop with the IMU. So commanded (v, omega) are
+ * actually tracked instead of being an open-loop duty guess.
  *
  * Architecture: each sensor runs in its own FreeRTOS task and publishes into a
  * mutex-protected snapshot. A fixed-rate control task reads the snapshot, runs
- * the pure follow_avoid algorithm, and drives the chassis. If any sensor fails
- * to start, its data simply stays "stale/invalid" and the algorithm degrades
- * gracefully (e.g. no lidar -> rely on ultrasonics; no UWB -> search then idle).
+ * the pure follow_avoid algorithm, applies the IMU heading loop, and drives the
+ * chassis (set_velocity + update). If any sensor fails to start, its data stays
+ * "stale/invalid" and the algorithm degrades gracefully (no lidar -> rely on
+ * ultrasonics; no UWB -> search then idle; no encoders -> feed-forward only).
  */
 
 #include <math.h>
@@ -45,8 +51,8 @@ static const char *TAG = "follow_robot";
 #endif
 #define DEG2RAD(d) ((float)(d) * (float)M_PI / 180.0f)
 
-/* Kconfig 'bool' symbols are left #undef when disabled, so they cannot be used
- * directly inside C expressions - normalise them to concrete values here. */
+/* Kconfig 'bool' symbols are left #undef when disabled, so normalise them to
+ * concrete values usable in C expressions. */
 #ifdef CONFIG_FOLLOW_ROBOT_MOTOR_LEFT_INVERT
 #define FR_LEFT_INVERT true
 #else
@@ -57,10 +63,33 @@ static const char *TAG = "follow_robot";
 #else
 #define FR_RIGHT_INVERT false
 #endif
+#ifdef CONFIG_FOLLOW_ROBOT_LEFT_ENC_INVERT
+#define FR_LEFT_ENC_INVERT true
+#else
+#define FR_LEFT_ENC_INVERT false
+#endif
+#ifdef CONFIG_FOLLOW_ROBOT_RIGHT_ENC_INVERT
+#define FR_RIGHT_ENC_INVERT true
+#else
+#define FR_RIGHT_ENC_INVERT false
+#endif
 #ifdef CONFIG_FOLLOW_ROBOT_UWB_LEFT_IS_POS_X
 #define FR_UWB_LEFT_SIGN 1.0f
 #else
 #define FR_UWB_LEFT_SIGN -1.0f
+#endif
+#ifdef CONFIG_FOLLOW_ROBOT_HEADING_HOLD
+#define FR_HEADING_HOLD true
+#else
+#define FR_HEADING_HOLD false
+#endif
+#ifdef CONFIG_FOLLOW_ROBOT_IMU_YAW_INVERT
+#define FR_IMU_YAW_SIGN -1.0f
+#else
+#define FR_IMU_YAW_SIGN 1.0f
+#endif
+#ifndef CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI
+#define CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI 0
 #endif
 
 #define LIDAR_SECTORS 36                 /* 5 deg per sector over 180 deg FOV */
@@ -211,6 +240,28 @@ static void ultra_task(void *arg)
     }
 }
 
+/* ----------------------------------------------------- IMU (heading loop) */
+#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
+static imu_i2c_t s_imu;
+static bool s_imu_ok = false;
+
+/* Read the IMU yaw (rad, CCW-positive after sign fix). Returns false if no
+ * trustworthy reading is available this cycle. */
+static bool imu_read_yaw(float *yaw_rad)
+{
+    if (!s_imu_ok) {
+        return false;
+    }
+    imu_i2c_reading_t r;
+    memset(&r, 0, sizeof(r));
+    if (imu_i2c_read_all(&s_imu, &r) != ESP_OK || !r.valid) {
+        return false;
+    }
+    *yaw_rad = FR_IMU_YAW_SIGN * DEG2RAD(r.euler_deg[2]);
+    return true;
+}
+#endif
+
 /* ----------------------------------------------------- Control loop */
 
 static fa_config_t build_fa_config(void)
@@ -230,19 +281,29 @@ static fa_config_t build_fa_config(void)
 static chassis_config_t build_chassis_config(void)
 {
     chassis_config_t cc = chassis_default_config();
-    cc.pwm_freq_hz = CONFIG_FOLLOW_ROBOT_PWM_FREQ_HZ;
-    cc.left_pwm_gpio = CONFIG_FOLLOW_ROBOT_MOTOR_LEFT_PWM_GPIO;
-    cc.left_in1_gpio = CONFIG_FOLLOW_ROBOT_MOTOR_LEFT_IN1_GPIO;
-    cc.left_in2_gpio = CONFIG_FOLLOW_ROBOT_MOTOR_LEFT_IN2_GPIO;
+    cc.esc_min_us = CONFIG_FOLLOW_ROBOT_ESC_MIN_US;
+    cc.esc_mid_us = CONFIG_FOLLOW_ROBOT_ESC_MID_US;
+    cc.esc_max_us = CONFIG_FOLLOW_ROBOT_ESC_MAX_US;
+    cc.left_esc_gpio = CONFIG_FOLLOW_ROBOT_LEFT_ESC_GPIO;
+    cc.right_esc_gpio = CONFIG_FOLLOW_ROBOT_RIGHT_ESC_GPIO;
     cc.left_invert = FR_LEFT_INVERT;
-    cc.right_pwm_gpio = CONFIG_FOLLOW_ROBOT_MOTOR_RIGHT_PWM_GPIO;
-    cc.right_in1_gpio = CONFIG_FOLLOW_ROBOT_MOTOR_RIGHT_IN1_GPIO;
-    cc.right_in2_gpio = CONFIG_FOLLOW_ROBOT_MOTOR_RIGHT_IN2_GPIO;
     cc.right_invert = FR_RIGHT_INVERT;
+
+    cc.left_enc_a_gpio = CONFIG_FOLLOW_ROBOT_LEFT_ENC_A_GPIO;
+    cc.left_enc_b_gpio = CONFIG_FOLLOW_ROBOT_LEFT_ENC_B_GPIO;
+    cc.right_enc_a_gpio = CONFIG_FOLLOW_ROBOT_RIGHT_ENC_A_GPIO;
+    cc.right_enc_b_gpio = CONFIG_FOLLOW_ROBOT_RIGHT_ENC_B_GPIO;
+    cc.left_enc_invert = FR_LEFT_ENC_INVERT;
+    cc.right_enc_invert = FR_RIGHT_ENC_INVERT;
+    cc.ticks_per_meter = (float)CONFIG_FOLLOW_ROBOT_TICKS_PER_METER;
+
     cc.track_width_m = CONFIG_FOLLOW_ROBOT_TRACK_WIDTH_MM / 1000.0f;
     cc.max_speed_mps = CONFIG_FOLLOW_ROBOT_MAX_WHEEL_SPEED_MMPS / 1000.0f;
-    cc.min_duty = CONFIG_FOLLOW_ROBOT_MIN_DUTY_PCT / 100.0f;
-    cc.max_duty = CONFIG_FOLLOW_ROBOT_MAX_DUTY_PCT / 100.0f;
+
+    cc.kp = (float)CONFIG_FOLLOW_ROBOT_SPEED_KP;
+    cc.ki = (float)CONFIG_FOLLOW_ROBOT_SPEED_KI;
+    cc.kd = (float)CONFIG_FOLLOW_ROBOT_SPEED_KD;
+    cc.pid_out_limit_us = (float)CONFIG_FOLLOW_ROBOT_SPEED_PID_LIMIT_US;
     return cc;
 }
 
@@ -265,6 +326,13 @@ static void control_task(void *arg)
     fa_ctx_t fa;
     fa_init(&fa, NULL);
     fa.cfg = build_fa_config();
+#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
+    const float max_omega = fa.cfg.max_angular_rps;
+    const float heading_kp = CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI / 1000.0f;
+    const bool heading_hold = FR_HEADING_HOLD;
+    float yaw_ref = 0.0f;       /* IMU heading reference (rad) */
+    bool yaw_ref_set = false;
+#endif
 
     const TickType_t period = pdMS_TO_TICKS(1000 / CONFIG_FOLLOW_ROBOT_CONTROL_HZ);
     TickType_t last_wake = xTaskGetTickCount();
@@ -301,16 +369,50 @@ static void control_task(void *arg)
         fa_output_t out = fa_update(&fa, &target,
                                     have_field ? &field : NULL, &ul, &ur, dt);
 
-        chassis_set_velocity(chassis, out.v_mps, out.omega_rps);
+        /* --- IMU heading closed-loop ------------------------------------
+         * The algorithm's omega is a feed-forward intent. We integrate it into
+         * a reference heading and trim the command by the IMU yaw error, so the
+         * suitcase actually achieves the turn / holds a straight line despite
+         * caster scrub. Only active while genuinely tracking the user
+         * (FOLLOW/AVOID); during SEARCH/ESTOP the robot must rotate freely. */
+        float omega_cmd = out.omega_rps;
+#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
+        const bool tracking =
+            (out.state == FA_STATE_FOLLOW || out.state == FA_STATE_AVOID);
+        float yaw_meas;
+        if (heading_hold && tracking && imu_read_yaw(&yaw_meas)) {
+            if (!yaw_ref_set) {
+                yaw_ref = yaw_meas;
+                yaw_ref_set = true;
+            }
+            yaw_ref = fa_wrap_pi(yaw_ref + out.omega_rps * dt);
+            const float err = fa_wrap_pi(yaw_ref - yaw_meas);
+            omega_cmd = out.omega_rps + heading_kp * err;
+            if (omega_cmd > max_omega) {
+                omega_cmd = max_omega;
+            } else if (omega_cmd < -max_omega) {
+                omega_cmd = -max_omega;
+            }
+        } else {
+            yaw_ref_set = false; /* re-seed the reference next time we re-acquire */
+        }
+#endif
+
+        chassis_set_velocity(chassis, out.v_mps, omega_cmd);
+        chassis_update(chassis, dt);
 
         if (++log_div >= CONFIG_FOLLOW_ROBOT_CONTROL_HZ / 5) { /* ~5 Hz */
             log_div = 0;
+            float mv = 0.0f;
+            float mw = 0.0f;
+            chassis_get_measured(chassis, &mv, &mw, NULL, NULL);
             ESP_LOGI(TAG,
-                     "%-6s tgt=%s d=%.2f br=%+.2f | clr=%.2f blk=%d | v=%+.2f w=%+.2f",
+                     "%-6s tgt=%s d=%.2f br=%+.2f | clr=%.2f blk=%d | "
+                     "cmd v=%+.2f w=%+.2f | meas v=%+.2f w=%+.2f",
                      state_name(out.state), target.valid ? "Y" : "N",
                      target.distance_m, target.bearing_rad,
-                     out.front_clearance_m, out.blocked, out.v_mps,
-                     out.omega_rps);
+                     out.front_clearance_m, out.blocked, out.v_mps, omega_cmd,
+                     mv, mw);
         }
     }
 }
@@ -326,19 +428,21 @@ static ultra_arg_t s_ua_right = {.dev = &s_ultra_right, .is_left = false};
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Follow-me suitcase starting");
+    ESP_LOGI(TAG, "Follow-me suitcase (算法2, closed-loop) starting");
 
     memset(&g_shared, 0, sizeof(g_shared));
     g_shared.lock = xSemaphoreCreateMutex();
     fa_obstacle_reset(&g_shared.field, LIDAR_SECTORS, LIDAR_FOV_RAD);
 
-    /* --- Chassis --- */
+    /* --- Chassis (ESC + encoder closed loop) --- */
     chassis_config_t cc = build_chassis_config();
     if (chassis_init(&s_chassis, &cc) == ESP_OK) {
         chassis_stop(&s_chassis);
-        ESP_LOGI(TAG, "chassis ready");
+        ESP_LOGI(TAG, "chassis ready; arming ESC (hold neutral %d ms)",
+                 CONFIG_FOLLOW_ROBOT_ESC_ARM_MS);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_FOLLOW_ROBOT_ESC_ARM_MS));
     } else {
-        ESP_LOGE(TAG, "chassis init FAILED - check motor GPIOs");
+        ESP_LOGE(TAG, "chassis init FAILED - check ESC/encoder GPIOs");
     }
 
     /* --- UWB target --- */
@@ -393,7 +497,8 @@ void app_main(void)
     }
 
 #if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
-    /* IMU is optional telemetry; failure here is non-fatal. */
+    /* IMU drives the heading loop; failure here is non-fatal (loop falls back to
+     * the open omega command). */
     static i2c_master_bus_handle_t i2c_bus;
     i2c_master_bus_config_t i2c_cfg = {
         .i2c_port = 0,
@@ -404,14 +509,17 @@ void app_main(void)
         .flags.enable_internal_pullup = true,
     };
     if (i2c_new_master_bus(&i2c_cfg, &i2c_bus) == ESP_OK) {
-        static imu_i2c_t imu;
         imu_i2c_config_t imucfg = imu_i2c_default_config();
         imucfg.sda_gpio = CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO;
         imucfg.scl_gpio = CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO;
         imucfg.device_address = CONFIG_FOLLOW_ROBOT_IMU_ADDR;
         imucfg.external_bus = i2c_bus;
-        if (imu_i2c_init(&imu, &imucfg) == ESP_OK) {
-            ESP_LOGI(TAG, "imu ready (yaw available for heading hold)");
+        if (imu_i2c_init(&s_imu, &imucfg) == ESP_OK) {
+            s_imu_ok = true;
+            ESP_LOGI(TAG, "imu ready (heading loop %s)",
+                     FR_HEADING_HOLD ? "ON" : "off");
+        } else {
+            ESP_LOGE(TAG, "imu init FAILED - heading loop disabled");
         }
     }
 #endif

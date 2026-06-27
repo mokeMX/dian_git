@@ -6,14 +6,11 @@ config SENSOR_HUB_A02YYUW_ENABLE
 
 config SENSOR_HUB_A02YYUW_USE_SW_UART
     bool "Use software (GPIO bit-bang) UART for A02YYUW #1"
-    default n
+    default y
     depends on SENSOR_HUB_A02YYUW_ENABLE
     help
-        When enabled, A02YYUW #1 uses a GPIO timer-based software UART instead
-        of a hardware UART port. A02YYUW only needs 9600 baud and 4-byte frames,
-        so software serial works well. Sensor #1 defaults to hardware UART1 and
-        sensor #2 to the software UART, which gives two independent ultrasonic
-        channels while leaving UART2 free for a high-baud sensor (e.g. RPLIDAR).
+        All sensors must run simultaneously so A02YYUW #1 now defaults to SW
+        UART, freeing hardware UART1 for BU UWB. The IO35 pin is unchanged.
 
 config SENSOR_HUB_A02YYUW_UART
     int "A02YYUW #1 hardware UART port"
@@ -24,18 +21,11 @@ config SENSOR_HUB_A02YYUW_RX_GPIO
     int "A02YYUW #1 ESP32 RX GPIO"
     default 35
     depends on SENSOR_HUB_A02YYUW_ENABLE
-    help
-        ATK-DNESP32S3 only exposes IO35/IO36/IO37 as fully-free GPIOs (see the
-        board IO allocation table); every other pin is taken by the RGB-LCD,
-        camera, I2S, SPI2, IIC0, USB or UART0. IO35 is assigned to ultrasonic #1.
 
 config SENSOR_HUB_A02YYUW_TX_GPIO
     int "A02YYUW #1 ESP32 TX GPIO (-1 = unused)"
     default -1
     depends on SENSOR_HUB_A02YYUW_ENABLE
-    help
-        A02YYUW transmits autonomously, so the ESP TX line is optional. Leave at
-        -1 to keep the pin free; the RX-only wiring is enough to read distance.
 
 config SENSOR_HUB_A02YYUW_BAUDRATE
     int "A02YYUW #1 UART baudrate"
@@ -50,10 +40,6 @@ config SENSOR_HUB_A02YYUW2_USE_SW_UART
     bool "Use software (GPIO bit-bang) UART for A02YYUW #2"
     default y
     depends on SENSOR_HUB_A02YYUW2_ENABLE
-    help
-        Sensor #2 defaults to the software (bit-bang) UART so the two ultrasonic
-        sensors never share a hardware UART or a pin. Disable to put sensor #2 on
-        the hardware UART selected below instead.
 
 config SENSOR_HUB_A02YYUW2_UART
     int "A02YYUW #2 hardware UART port"
@@ -64,9 +50,6 @@ config SENSOR_HUB_A02YYUW2_RX_GPIO
     int "A02YYUW #2 ESP32 RX GPIO"
     default 36
     depends on SENSOR_HUB_A02YYUW2_ENABLE
-    help
-        IO36 is the second of the board's fully-free GPIOs and is assigned to
-        ultrasonic #2. IO37 remains spare.
 
 config SENSOR_HUB_A02YYUW2_TX_GPIO
     int "A02YYUW #2 ESP32 TX GPIO (-1 = unused)"
@@ -80,7 +63,7 @@ config SENSOR_HUB_A02YYUW2_BAUDRATE
 
 config SENSOR_HUB_BU_UWB_ENABLE
     bool "Enable BU03/BU04 passive UART monitor test"
-    default n
+    default y
 
 config SENSOR_HUB_BU_UWB_UART
     int "BU03/BU04 UART port"
@@ -104,43 +87,27 @@ config SENSOR_HUB_BU_UWB_BAUDRATE
 
 config SENSOR_HUB_FSR_ENABLE
     bool "Enable FSR pressure ADC test"
-    default n
+    default y
 
 config SENSOR_HUB_FSR_ADC_GPIO
     int "FSR ADC GPIO, used for logs and wiring docs"
     default 8
     depends on SENSOR_HUB_FSR_ENABLE
-    help
-        GPIO connected to the FSR voltage divider output. This value is
-        informational for logs; the actual ADC input is selected by
-        SENSOR_HUB_FSR_ADC_CHANNEL.
 
 config SENSOR_HUB_FSR_ADC_CHANNEL
     int "FSR ADC1 channel"
     default 7
     depends on SENSOR_HUB_FSR_ENABLE
-    help
-        ESP32-S3 ADC1 channel connected to the FSR voltage divider output.
-        The board pin table marks IO8 as ADC_IN; on ESP32-S3 it maps to
-        ADC1_CHANNEL_7.
 
 config SENSOR_HUB_I2C_SDA_GPIO
     int "Shared I2C SDA GPIO"
     default 11
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
-    help
-        GPIO used as SDA for shared I2C sensors. Uses a dedicated, conflict-free
-        pin instead of the original GPIO38/GPIO39 defaults to avoid collision
-        with other peripherals.
 
 config SENSOR_HUB_I2C_SCL_GPIO
     int "Shared I2C SCL GPIO"
     default 12
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
-    help
-        GPIO used as SCL for shared I2C sensors. Uses a dedicated, conflict-free
-        pin instead of the original GPIO37/GPIO38 defaults to avoid collision
-        with UART and other I2C pins.
 
 config SENSOR_HUB_I2C_SPEED_HZ
     int "Shared I2C clock speed"
@@ -154,7 +121,7 @@ config SENSOR_HUB_IMU_ADDR
 
 config SENSOR_HUB_RPLIDAR_ENABLE
     bool "Enable RPLIDAR C1 test"
-    default n
+    default y
 
 config SENSOR_HUB_RPLIDAR_UART
     int "RPLIDAR C1 UART port"
@@ -178,11 +145,11 @@ config SENSOR_HUB_RPLIDAR_BAUDRATE
 
 config SENSOR_HUB_IMU_ENABLE
     bool "Enable custom I2C IMU test"
-    default n
+    default y
 
 config SENSOR_HUB_VL53L1X_ENABLE
     bool "Enable VL53L1X ToF test"
-    default n
+    default y
 
 config SENSOR_HUB_VL53L1X_ADDR_8BIT
     hex "VL53L1X 8-bit I2C address"

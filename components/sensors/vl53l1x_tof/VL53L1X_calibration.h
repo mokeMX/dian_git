@@ -15,9 +15,6 @@
  * @brief Calibration Functions definition
  */
 
-#ifndef _CALIBRATION_H_
-#define _CALIBRATION_H_
-
 /**
  * @brief This function performs the offset calibration.\n
  * The function returns the offset value found and programs the offset compensation into the device.
@@ -41,4 +38,3 @@ int8_t VL53L1X_CalibrateOffset(uint16_t dev, uint16_t TargetDistInMm, int16_t *o
  */
 int8_t VL53L1X_CalibrateXtalk(uint16_t dev, uint16_t TargetDistInMm, uint16_t *xtalk);
 
-#endif

@@ -15,15 +15,7 @@
  * @brief Those platform functions are platform dependent and have to be implemented by the user
  */
 
-#ifndef _VL53L1_PLATFORM_H_
-#define _VL53L1_PLATFORM_H_
-
 #include "vl53l1_types.h"
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 typedef struct {
 	uint32_t dummy;
@@ -96,8 +88,4 @@ int8_t VL53L1_WaitMs(
 		uint16_t dev,
 		int32_t       wait_ms);
 
-#ifdef __cplusplus
-}
-#endif
 
-#endif

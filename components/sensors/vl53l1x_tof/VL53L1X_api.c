@@ -18,7 +18,6 @@
 #include "VL53L1X_api.h"
 #include <string.h>
 
-#if 0
 uint8_t VL51L1X_NVM_CONFIGURATION[] = {
 0x00, /* 0x00 : not user-modifiable */
 0x29, /* 0x01 : 7 bits I2C address (default=0x29), use SetI2CAddress(). Warning: after changing the register value to a new I2C address, the device will only answer to the new address */
@@ -54,8 +53,7 @@ uint8_t VL51L1X_NVM_CONFIGURATION[] = {
 0x00, /* 0x21 : not user-modifiable */
 0x00, /* 0x22 : not user-modifiable */
 0x00, /* 0x23 : not user-modifiable */
-}
-#endif
+};
 
 const uint8_t VL51L1X_DEFAULT_CONFIGURATION[] = {
 0x00, /* 0x2d : set bit 2 and 5 to 1 for fast plus mode (1MHz I2C), else don't touch */

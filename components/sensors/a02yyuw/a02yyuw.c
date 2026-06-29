@@ -1,16 +1,12 @@
 #include "a02yyuw.h"
 
-#ifdef ESP_PLATFORM
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#endif
 
-#ifdef ESP_PLATFORM
 static const char *TAG = "a02yyuw";
 /* Backing device for the legacy single-instance API. */
 static a02yyuw_t s_singleton;
-#endif
 
 a02yyuw_config_t a02yyuw_default_config(uart_port_t uart_port,
                                         int rx_gpio,
@@ -82,7 +78,6 @@ bool a02yyuw_parse_latest(const uint8_t *buf,
     return found;
 }
 
-#ifdef ESP_PLATFORM
 esp_err_t a02yyuw_init_dev(a02yyuw_t *dev, const a02yyuw_config_t *config)
 {
     if (dev == NULL || config == NULL || config->rx_gpio < 0) {
@@ -223,21 +218,3 @@ void a02yyuw_deinit(void)
 {
     a02yyuw_deinit_dev(&s_singleton);
 }
-#else
-esp_err_t a02yyuw_init(const a02yyuw_config_t *config)
-{
-    (void)config;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t a02yyuw_read(a02yyuw_reading_t *out, uint32_t wait_ms)
-{
-    (void)out;
-    (void)wait_ms;
-    return ESP_ERR_INVALID_STATE;
-}
-
-void a02yyuw_deinit(void)
-{
-}
-#endif

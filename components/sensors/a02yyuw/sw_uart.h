@@ -7,10 +7,6 @@
 #include "driver/gptimer.h"
 #include "freertos/FreeRTOS.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define SW_UART_MAX_RX_BUF 1024
 
 typedef struct {
@@ -51,7 +47,3 @@ esp_err_t sw_uart_init(sw_uart_t *uart, const sw_uart_config_t *config);
 int sw_uart_read_bytes(sw_uart_t *uart, uint8_t *buf, int max_len, uint32_t timeout_ms);
 void sw_uart_flush(sw_uart_t *uart);
 void sw_uart_deinit(sw_uart_t *uart);
-
-#ifdef __cplusplus
-}
-#endif

@@ -4,22 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef ESP_PLATFORM
 #include "driver/uart.h"
 #include "esp_err.h"
-#else
-typedef int esp_err_t;
-#define ESP_OK 0
-#define ESP_FAIL -1
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-#define ESP_ERR_TIMEOUT 0x107
-typedef int uart_port_t;
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define BU_UWB_DEFAULT_BAUDRATE 115200
 #define BU_UWB_DEFAULT_RX_BUF_SIZE 1024
@@ -80,6 +66,3 @@ esp_err_t bu_uwb_read_line(char *line, size_t line_size, uint32_t timeout_ms);
 esp_err_t bu_uwb_request_distance(bu_uwb_distance_t *out, uint32_t timeout_ms);
 void bu_uwb_deinit(void);
 
-#ifdef __cplusplus
-}
-#endif

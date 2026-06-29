@@ -1,8 +1,8 @@
-# 智能跟随行李箱 · 算法4（传感器修复 + 闭环控制）
+# 智能跟随行李箱 · 算法4（传感器修复 + 闭环控制 + 无预编译条件）
 
-**算法4 = 传感器修改6（经验证可正常收数的传感器驱动） + 算法3（跟随避障 + 闭环底盘控制）**
+**算法4 = 传感器修改6（经验证可正常收数） + 算法2/3 闭环控制逻辑 + 全部移除 #if/#ifdef**
 
-在 `算法3` 基础上，用 `传感器修改6` 中经验证可正常接收数据的传感器驱动替换存在问题的传感器代码，保留算法3 的闭环控制逻辑（跟随 + VFH-lite 避障 + 状态机 + APO-DL 电调 + AB 编码器轮速 PID + IMU 航向闭环），并恢复 `#ifdef ESP_PLATFORM` 预编译条件以保持 PC 端单元测试兼容性。
+以 `传感器修改6` 的经验证传感器驱动为基础，整合 `算法2/3` 的闭环控制逻辑（跟随 + VFH-lite 避障 + 状态机 + APO-DL 电调 + AB 编码器 PID + IMU 航向闭环），并**移除全部 `#if` / `#ifdef` / `#ifndef` / `#else` / `#endif` 预编译指令**，代码无条件包含全部传感器驱动和闭环控制逻辑。
 
 ---
 
@@ -12,22 +12,22 @@
 |------|-----------|---------|-----------|------|
 | 算法1 | 传感器修改系列 | 开环 H 桥 + 跟随/避障 | 有 `#if/#ifdef` | 历史 |
 | 算法2 | 传感器修改系列 | 闭环 APO-DL ESC + AB 编码器 PID + IMU 航向 | 有 `#if/#ifdef` | 参考 |
-| 算法3 | 传感器驱动有 Bug | 闭环控制（同算法2） | **全部移除**（导致传感器问题和 PC 测试不可编译） | 有问题 |
-| **算法4**（本分支） | **传感器修改6（经验证可收数）** | 闭环控制（同算法2/3） | **恢复 ESP_PLATFORM 守卫** | ✅ 当前 |
+| 算法3 | 传感器驱动有 Bug | 闭环控制（同算法2） | 全部移除（导致传感器问题） | 有问题 |
+| **算法4**（本分支） | **传感器修改6（经验证可收数） + 全部 #if 已清理** | 闭环控制（同算法2/3） | **全部移除** | ✅ 当前 |
 
 ---
 
-## 算法4 修改清单
+## 算法3 → 算法4 修改清单
 
 | 维度 | 算法3 | 算法4（本分支） |
 |------|-------|----------------|
-| 传感器代码 | 算法3 自带的传感器驱动（有问题） | **替代为传感器修改6 的经验证驱动** |
-| 控制代码 | chassis.c 无 `#ifdef ESP_PLATFORM`（PC 测试不可编译） | **恢复算法2 的 ESP_PLATFORM 守卫**，PC 测试可用 |
-| 传感器引脚 | 算法3 默认 | **沿用传感器修改6 的引脚分配**（I2C: 38/39, 超声波: 4/5, UWB: 6/7, RPLIDAR: 17/18） |
+| 传感器代码 | 算法3 自带（有问题） | **替换为传感器修改6 经验证驱动，并移除其 #if 指令** |
+| 控制代码 | chassis.c 无 `#ifdef` | **同样无 `#ifdef`**（底盘代码逻辑不变） |
+| 预编译条件 | 全部移除 | **全部移除**（传感器 + 底盘 + 示例代码，无任何 `#if`） |
+| PC stub | 已移除 | **已移除**（仅保留 ESP 实现） |
 | 算法逻辑 | 跟随 + VFH-lite 避障 + 状态机 | **不变** |
 | 底盘控制 | APO-DL ESC + AB 编码器 PID + IMU 航向 | **不变** |
-| 预编译条件 | 无 | **恢复 `#ifdef ESP_PLATFORM`**（传感器 + 底盘） |
-| 根项目 | sensor_hub（传感器测试） | **改为 follow_robot（完整跟随机器人）** |
+| 根项目 | sensor_hub | **改为 follow_robot**（完整跟随机器人） |
 
 ---
 
@@ -96,23 +96,13 @@ idf.py build flash monitor
 
 ---
 
-## PC 端测试（无需硬件）
+## 测试
+
+算法4 已移除全部 PC stub，测试文件保留供参考（需 ESP 环境编译运行）。传感器协议解析测试（纯 C 解析逻辑，无硬件依赖）仍可在 PC 运行：
 
 ```bash
-# 传感器协议解析测试
 bash tests/protocol/run_tests.sh
-
-# 跟随避障算法 + PID + 运动学测试
-bash tests/algorithm/run_tests.sh
 ```
-
-测试覆盖：
-- 差分驱动运动学（直行/原地旋转/饱和缩放）
-- 轮速 PID（符号/限幅/积分抗饱和/闭环收敛/复位清零）
-- 障碍物场（添加/最近保留/FOV 外忽略）
-- 跟随行为（直行/转向目标/停止带保持）
-- 避障（超声波急停/VFH 绕行）
-- 搜索（目标丢失旋转/从未见过目标待机）
 
 ---
 
@@ -204,15 +194,14 @@ bash tests/algorithm/run_tests.sh
 
 ## 关键代码导读
 
-| 文件 | 作用 | 来源 |
+| 文件 | 作用 | 说明 |
 |------|------|------|
-| `components/sensors/*` | 传感器驱动（经验证可正常收数） | 传感器修改6 |
-| `components/control/chassis/chassis.c` | 闭环底盘：ESC PWM + 编码器 PID + 前馈 | 算法2（恢复 ESP_PLATFORM 守卫） |
-| `components/control/follow_avoid/follow_avoid.c` | 跟随 + VFH-lite 避障 + 状态机（纯 C） | 算法3 |
-| `examples/follow_robot/main/main.c` | 主程序：多传感器 RTOS 任务 + 控制循环 | 算法3 |
-| `examples/sensor_hub/main/main.c` | 传感器测试程序：7 路传感器并发读取 | 传感器修改6 |
-| `tests/algorithm/test_follow_avoid.c` | 算法 + PID + 运动学 PC 单元测试 | 算法2 |
-| `tests/protocol/test_sensor_parsers.c` | 传感器协议解析 PC 单元测试 | 传感器修改系列 |
+| `components/sensors/*` | 6 路传感器驱动 | 传感器修改6 经验证版本，已移除 `#if` 预编译指令 |
+| `components/control/chassis/chassis.c` | 闭环底盘：ESC PWM + 编码器 PID | 算法2/3 控制逻辑，已移除 `#ifdef ESP_PLATFORM` |
+| `components/control/follow_avoid/follow_avoid.c` | 跟随 + VFH-lite 避障 + 状态机 | 纯 C，无平台依赖 |
+| `examples/follow_robot/main/main.c` | 主程序：多传感器 RTOS 任务 + 控制循环 | 已移除所有 `#if` 指令 |
+| `examples/sensor_hub/main/main.c` | 传感器测试：7 路传感器并发读取 | 传感器修改6 原版 |
+| `tests/protocol/test_sensor_parsers.c` | 传感器协议解析 PC 测试 | 纯 C 解析逻辑，PC 可运行 |
 
 ---
 

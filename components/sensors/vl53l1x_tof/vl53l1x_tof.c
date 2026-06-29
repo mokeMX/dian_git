@@ -2,15 +2,11 @@
 
 #include <string.h>
 
-#ifdef ESP_PLATFORM
 #include "VL53L1X_api.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#endif
 
-#ifdef ESP_PLATFORM
 static vl53l1x_tof_t *s_active_sensor;
-#endif
 
 vl53l1x_tof_config_t vl53l1x_tof_default_config(void)
 {
@@ -28,7 +24,6 @@ vl53l1x_tof_config_t vl53l1x_tof_default_config(void)
     return config;
 }
 
-#ifdef ESP_PLATFORM
 static esp_err_t ensure_active(uint16_t dev)
 {
     if (s_active_sensor == NULL || !s_active_sensor->initialized ||
@@ -276,27 +271,3 @@ void vl53l1x_tof_deinit(vl53l1x_tof_t *sensor)
     }
     memset(sensor, 0, sizeof(*sensor));
 }
-#else
-esp_err_t vl53l1x_tof_init(vl53l1x_tof_t *sensor,
-                           const vl53l1x_tof_config_t *config)
-{
-    (void)sensor;
-    (void)config;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t vl53l1x_tof_read(vl53l1x_tof_t *sensor,
-                           vl53l1x_tof_reading_t *out,
-                           uint32_t timeout_ms)
-{
-    (void)sensor;
-    (void)out;
-    (void)timeout_ms;
-    return ESP_ERR_INVALID_STATE;
-}
-
-void vl53l1x_tof_deinit(vl53l1x_tof_t *sensor)
-{
-    (void)sensor;
-}
-#endif

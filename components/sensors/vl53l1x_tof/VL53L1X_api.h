@@ -15,9 +15,6 @@
  * @brief Functions definition
  */
 
-#ifndef _API_H_
-#define _API_H_
-
 #include "vl53l1_platform.h"
 
 #define VL53L1X_IMPLEMENTATION_VER_MAJOR       3
@@ -345,4 +342,3 @@ VL53L1X_ERROR VL53L1X_GetSigmaThreshold(uint16_t dev, uint16_t *signal);
  */
 VL53L1X_ERROR VL53L1X_StartTemperatureUpdate(uint16_t dev);
 
-#endif

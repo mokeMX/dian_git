@@ -1,0 +1,230 @@
+menu "Follow-me suitcase 算法2 (closed-loop follow + obstacle avoidance)"
+
+comment "--- Drive motors (rear diff-drive: APO-DL ESC + RC PWM, 算法2) ---"
+
+config FOLLOW_ROBOT_LEFT_ESC_GPIO
+    int "Left ESC signal GPIO (RC PWM out)"
+    default 4
+    help
+        RC servo-pulse output to the rear-LEFT ESC (50 Hz, 1000-2000 us).
+        Matches the standalone 动力轮代码 branch (GPIO4).
+
+config FOLLOW_ROBOT_RIGHT_ESC_GPIO
+    int "Right ESC signal GPIO (RC PWM out)"
+    default 5
+
+config FOLLOW_ROBOT_MOTOR_LEFT_INVERT
+    bool "Invert left motor direction (flip forward/reverse pulse)"
+    default n
+    help
+        Leave OFF if you already swapped the motor wires in hardware (the
+        动力轮代码 build did). Turn ON to flip a wheel's direction in software.
+
+config FOLLOW_ROBOT_MOTOR_RIGHT_INVERT
+    bool "Invert right motor direction"
+    default n
+
+config FOLLOW_ROBOT_ESC_MIN_US
+    int "ESC pulse: full reverse (us)"
+    default 1000
+config FOLLOW_ROBOT_ESC_MID_US
+    int "ESC pulse: neutral / stop (us)"
+    default 1500
+config FOLLOW_ROBOT_ESC_MAX_US
+    int "ESC pulse: full forward (us)"
+    default 2000
+config FOLLOW_ROBOT_ESC_ARM_MS
+    int "Hold neutral this long at boot so the ESC arms (ms)"
+    default 2000
+
+comment "--- AB encoders (closed-loop speed feedback, 算法2) ---"
+
+config FOLLOW_ROBOT_LEFT_ENC_A_GPIO
+    int "Left encoder A GPIO"
+    default 6
+config FOLLOW_ROBOT_LEFT_ENC_B_GPIO
+    int "Left encoder B GPIO"
+    default 7
+config FOLLOW_ROBOT_RIGHT_ENC_A_GPIO
+    int "Right encoder A GPIO"
+    default 15
+config FOLLOW_ROBOT_RIGHT_ENC_B_GPIO
+    int "Right encoder B GPIO"
+    default 16
+config FOLLOW_ROBOT_LEFT_ENC_INVERT
+    bool "Invert left encoder count sign"
+    default n
+    help
+        If a wheel drives forward but its encoder counts DOWN (e.g. because the
+        motor wires were swapped), enable this so the speed loop sees the right
+        sign. Calibrate by jacking up the wheels and watching the log.
+config FOLLOW_ROBOT_RIGHT_ENC_INVERT
+    bool "Invert right encoder count sign"
+    default n
+config FOLLOW_ROBOT_TICKS_PER_METER
+    int "Encoder ticks (4x) per metre of wheel travel - CALIBRATE"
+    default 2000
+    help
+        4x quadrature counts for one metre of forward travel. Measure: push the
+        robot exactly 1 m and read the printed tick delta.
+
+comment "--- Wheel-speed PID (us output per m/s error) ---"
+
+config FOLLOW_ROBOT_SPEED_KP
+    int "Speed loop KP (us per m/s)"
+    default 200
+config FOLLOW_ROBOT_SPEED_KI
+    int "Speed loop KI (us per m/s per s)"
+    default 300
+config FOLLOW_ROBOT_SPEED_KD
+    int "Speed loop KD (us per m/s/s)"
+    default 5
+config FOLLOW_ROBOT_SPEED_PID_LIMIT_US
+    int "Max PID contribution per wheel (us)"
+    default 400
+
+config FOLLOW_ROBOT_TRACK_WIDTH_MM
+    int "Track width: distance between the two rear wheels (mm)"
+    default 300
+
+config FOLLOW_ROBOT_MAX_WHEEL_SPEED_MMPS
+    int "Top wheel speed (mm/s): sets feed-forward gain and clamps set-points"
+    default 800
+
+comment "--- Follow behaviour ---"
+
+config FOLLOW_ROBOT_FOLLOW_DISTANCE_MM
+    int "Desired standoff distance behind the user (mm)"
+    default 1000
+
+config FOLLOW_ROBOT_STOP_BAND_MM
+    int "Stop band below standoff where the robot holds still (mm)"
+    default 250
+
+config FOLLOW_ROBOT_MAX_LINEAR_MMPS
+    int "Max follow linear speed (mm/s)"
+    default 700
+
+config FOLLOW_ROBOT_MAX_ANGULAR_MRADPS
+    int "Max yaw rate (milli-rad/s)"
+    default 1600
+
+comment "--- Obstacle avoidance ---"
+
+config FOLLOW_ROBOT_EMERGENCY_DIST_MM
+    int "Emergency-stop distance, front cone / ultrasonic (mm)"
+    default 350
+
+config FOLLOW_ROBOT_SLOW_DIST_MM
+    int "Start slowing down below this front clearance (mm)"
+    default 1200
+
+config FOLLOW_ROBOT_SAFE_DIST_MM
+    int "A lidar sector closer than this counts as blocked (mm)"
+    default 600
+
+config FOLLOW_ROBOT_ROBOT_HALF_WIDTH_MM
+    int "Half of the chassis width, used to widen blocked sectors (mm)"
+    default 220
+
+config FOLLOW_ROBOT_LIDAR_FORWARD_DEG
+    int "Lidar raw angle that points to robot FORWARD (deg)"
+    default 0
+    help
+        The RPLIDAR reports angles relative to its own zero mark. Set this to
+        the raw lidar angle that aligns with the robot's forward (+x) axis.
+
+config FOLLOW_ROBOT_LIDAR_CW
+    bool "Lidar angle increases clockwise (RPLIDAR default)"
+    default y
+    help
+        RPLIDAR C1 measures angle clockwise looking down. Enable so the driver
+        flips it into the robot's counter-clockwise-positive convention.
+
+comment "--- UWB tag -> follow target mapping ---"
+
+config FOLLOW_ROBOT_UWB_LEFT_IS_POS_X
+    bool "UWB Xcm positive means user is to the LEFT"
+    default n
+    help
+        The BU0x TWR frame reports Xcm (lateral) and Ycm (forward). If your kit
+        maps +Xcm to the user's RIGHT, leave this disabled; enable it if +Xcm is
+        to the LEFT. Used to build the follow bearing.
+
+comment "--- Sensor wiring (mirrors the sensor_hub example defaults) ---"
+
+config FOLLOW_ROBOT_UWB_UART
+    int "BU UWB UART port"
+    default 1
+config FOLLOW_ROBOT_UWB_RX_GPIO
+    int "BU UWB ESP RX GPIO"
+    default 18
+config FOLLOW_ROBOT_UWB_TX_GPIO
+    int "BU UWB ESP TX GPIO"
+    default 8
+config FOLLOW_ROBOT_UWB_BAUD
+    int "BU UWB baudrate"
+    default 115200
+
+config FOLLOW_ROBOT_LIDAR_UART
+    int "RPLIDAR UART port"
+    default 2
+config FOLLOW_ROBOT_LIDAR_RX_GPIO
+    int "RPLIDAR ESP RX GPIO"
+    default 17
+config FOLLOW_ROBOT_LIDAR_TX_GPIO
+    int "RPLIDAR ESP TX GPIO"
+    default 9
+config FOLLOW_ROBOT_LIDAR_BAUD
+    int "RPLIDAR baudrate"
+    default 460800
+
+# Both ultrasonics use the per-instance software (bit-bang) UART: the two
+# hardware UARTs are taken by UWB and the lidar. A02YYUW is 9600 baud, RX-only.
+config FOLLOW_ROBOT_ULTRA_LEFT_RX_GPIO
+    int "Front-left ultrasonic (A02YYUW) RX GPIO (SW UART)"
+    default 35
+config FOLLOW_ROBOT_ULTRA_RIGHT_RX_GPIO
+    int "Front-right ultrasonic (A02YYUW) RX GPIO (SW UART)"
+    default 36
+
+comment "--- IMU heading closed-loop (算法2) ---"
+
+config FOLLOW_ROBOT_IMU_ENABLE
+    bool "Use the IMU"
+    default y
+config FOLLOW_ROBOT_HEADING_HOLD
+    bool "Close the heading loop with the IMU (feed-forward omega + yaw error)"
+    default y
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+    help
+        The follow_avoid algorithm outputs a desired yaw rate; this loop
+        integrates it into a reference heading and trims the command with the
+        IMU yaw error so the suitcase actually achieves the turn and holds a
+        straight line despite caster scrub / wheel slip.
+config FOLLOW_ROBOT_HEADING_KP_MILLI
+    int "Heading-hold KP (milli, rad/s per rad of error)"
+    default 1500
+    depends on FOLLOW_ROBOT_HEADING_HOLD
+config FOLLOW_ROBOT_IMU_YAW_INVERT
+    bool "Invert IMU yaw sign (if +yaw is not CCW for your mounting)"
+    default n
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+config FOLLOW_ROBOT_I2C_SDA_GPIO
+    int "IMU I2C SDA GPIO"
+    default 11
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+config FOLLOW_ROBOT_I2C_SCL_GPIO
+    int "IMU I2C SCL GPIO"
+    default 12
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+config FOLLOW_ROBOT_IMU_ADDR
+    hex "IMU 7-bit I2C address"
+    default 0x23
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+
+config FOLLOW_ROBOT_CONTROL_HZ
+    int "Control loop frequency (Hz)"
+    default 50
+
+endmenu

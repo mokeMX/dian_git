@@ -3,18 +3,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#ifdef ESP_PLATFORM
 #include "esp_err.h"
-#include "esp_timer.h"
-#else
-typedef int esp_err_t;
-#define ESP_OK 0
-#define ESP_FAIL -1
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-#define ESP_ERR_NO_MEM 0x101
-#endif
+#include "driver/gptimer.h"
+#include "freertos/FreeRTOS.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,7 +37,10 @@ typedef struct sw_uart_inst {
     volatile sw_uart_state_t state;
     volatile uint8_t current_byte;
     volatile int bit_count;
-    esp_timer_handle_t timer;
+    
+    gptimer_handle_t timer;
+    portMUX_TYPE lock;
+    
     uint32_t bit_us;
     uint32_t half_bit_us;
     bool initialized;

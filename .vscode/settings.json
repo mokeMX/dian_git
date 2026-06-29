@@ -1,0 +1,11 @@
+{
+  "clangd.path": "D:\\Espressif\\tools\\esp-clang\\esp-18.1.2_20240912\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=d:\\ESP32_S3\\DIAN_TEST\\dian_git\\build"
+  ],
+  "idf.flashType": "UART",
+  "idf.portWin": "COM35",
+  "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/"
+}

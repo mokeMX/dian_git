@@ -2,7 +2,6 @@
 
 #include <string.h>   /* memset */
 
-#ifdef ESP_PLATFORM
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_rom_gpio.h"
@@ -220,38 +219,3 @@ void sw_uart_deinit(sw_uart_t *uart)
     uart->initialized = false;
     ESP_LOGI(TAG, "SW UART deinitialized");
 }
-#else
-sw_uart_config_t sw_uart_default_config(int rx_gpio, int tx_gpio)
-{
-    sw_uart_config_t config = { .rx_gpio = rx_gpio, .tx_gpio = tx_gpio, .baudrate = 9600, .rx_buffer_size = 256 };
-    (void)rx_gpio;
-    (void)tx_gpio;
-    return config;
-}
-
-esp_err_t sw_uart_init(sw_uart_t *uart, const sw_uart_config_t *config)
-{
-    (void)uart;
-    (void)config;
-    return ESP_ERR_INVALID_STATE;
-}
-
-int sw_uart_read_bytes(sw_uart_t *uart, uint8_t *buf, int max_len, uint32_t timeout_ms)
-{
-    (void)uart;
-    (void)buf;
-    (void)max_len;
-    (void)timeout_ms;
-    return 0;
-}
-
-void sw_uart_flush(sw_uart_t *uart)
-{
-    (void)uart;
-}
-
-void sw_uart_deinit(sw_uart_t *uart)
-{
-    (void)uart;
-}
-#endif

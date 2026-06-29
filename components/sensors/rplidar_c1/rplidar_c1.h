@@ -3,22 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef ESP_PLATFORM
 #include "driver/uart.h"
 #include "esp_err.h"
-#else
-typedef int esp_err_t;
-#define ESP_OK 0
-#define ESP_FAIL -1
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-#define ESP_ERR_TIMEOUT 0x107
-typedef int uart_port_t;
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define RPLIDAR_C1_DEFAULT_BAUDRATE 460800
 #define RPLIDAR_C1_DEFAULT_RX_BUF_SIZE 4096
@@ -70,7 +56,3 @@ esp_err_t rplidar_c1_get_info(rplidar_c1_t *lidar,
 esp_err_t rplidar_c1_set_motor_speed(rplidar_c1_t *lidar, uint16_t rpm);
 esp_err_t rplidar_c1_start_scan(rplidar_c1_t *lidar);
 bool rplidar_c1_read_point(rplidar_c1_t *lidar, rplidar_c1_point_t *point);
-
-#ifdef __cplusplus
-}
-#endif

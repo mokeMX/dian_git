@@ -2,17 +2,13 @@
 
 #include <stddef.h>
 
-#ifdef ESP_PLATFORM
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
-#endif
 
-#ifdef ESP_PLATFORM
 static const char *TAG = "fsr_adc";
 static fsr_adc_config_t s_config;
 static adc_oneshot_unit_handle_t s_adc_handle;
 static bool s_initialized;
-#endif
 
 fsr_adc_config_t fsr_adc_default_config(void)
 {
@@ -64,7 +60,6 @@ float fsr_adc_voltage_to_weight_kg(float voltage_v,
     return weight_kg;
 }
 
-#ifdef ESP_PLATFORM
 esp_err_t fsr_adc_init(const fsr_adc_config_t *config)
 {
     if (config == NULL || config->sample_count <= 0) {
@@ -141,20 +136,3 @@ void fsr_adc_deinit(void)
     }
     s_initialized = false;
 }
-#else
-esp_err_t fsr_adc_init(const fsr_adc_config_t *config)
-{
-    (void)config;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t fsr_adc_read(fsr_adc_reading_t *out)
-{
-    (void)out;
-    return ESP_ERR_INVALID_STATE;
-}
-
-void fsr_adc_deinit(void)
-{
-}
-#endif

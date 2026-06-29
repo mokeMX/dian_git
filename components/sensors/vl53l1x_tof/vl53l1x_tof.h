@@ -3,24 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef ESP_PLATFORM
 #include "driver/i2c_master.h"
 #include "esp_err.h"
-#else
-typedef int esp_err_t;
-#define ESP_OK 0
-#define ESP_FAIL -1
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-#define ESP_ERR_TIMEOUT 0x107
-typedef void *i2c_master_bus_handle_t;
-typedef void *i2c_master_dev_handle_t;
-typedef int i2c_port_num_t;
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define VL53L1X_TOF_DEFAULT_ADDR_8BIT 0x52
 #define VL53L1X_TOF_DEFAULT_ADDR_7BIT 0x29
@@ -62,7 +46,3 @@ esp_err_t vl53l1x_tof_read(vl53l1x_tof_t *sensor,
                            vl53l1x_tof_reading_t *out,
                            uint32_t timeout_ms);
 void vl53l1x_tof_deinit(vl53l1x_tof_t *sensor);
-
-#ifdef __cplusplus
-}
-#endif

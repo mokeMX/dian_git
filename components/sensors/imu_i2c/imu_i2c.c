@@ -35,7 +35,6 @@ static float le_float(const uint8_t *bytes)
     return value;
 }
 
-#ifdef ESP_PLATFORM
 static esp_err_t read_reg(imu_i2c_t *imu, uint8_t reg, uint8_t *buf, size_t len)
 {
     return i2c_master_transmit_receive(imu->dev,
@@ -179,27 +178,3 @@ esp_err_t imu_i2c_read_all(imu_i2c_t *imu, imu_i2c_reading_t *out)
     out->valid = true;
     return ESP_OK;
 }
-#else
-esp_err_t imu_i2c_init(imu_i2c_t *imu, const imu_i2c_config_t *config)
-{
-    (void)imu;
-    (void)config;
-    return ESP_ERR_INVALID_STATE;
-}
-
-void imu_i2c_deinit(imu_i2c_t *imu) { (void)imu; }
-
-esp_err_t imu_i2c_read_version(imu_i2c_t *imu, uint8_t version[3])
-{
-    (void)imu;
-    (void)version;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t imu_i2c_read_all(imu_i2c_t *imu, imu_i2c_reading_t *out)
-{
-    (void)imu;
-    (void)out;
-    return ESP_ERR_INVALID_STATE;
-}
-#endif

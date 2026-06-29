@@ -15,8 +15,7 @@
  * @brief Functions definition
  */
 
-#ifndef _API_H_
-#define _API_H_
+#pragma once
 
 #include "vl53l1_platform.h"
 
@@ -344,5 +343,3 @@ VL53L1X_ERROR VL53L1X_GetSigmaThreshold(uint16_t dev, uint16_t *signal);
  * without sensor ranging activity for an extended period.
  */
 VL53L1X_ERROR VL53L1X_StartTemperatureUpdate(uint16_t dev);
-
-#endif

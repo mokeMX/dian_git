@@ -13,23 +13,18 @@
 #include "rplidar_c1.h"
 #include "vl53l1x_tof.h"
 
-#if CONFIG_SENSOR_HUB_IMU_ENABLE || CONFIG_SENSOR_HUB_VL53L1X_ENABLE
 #include "driver/i2c_master.h"
-#endif
 
 #define HUB_I2C_PORT 0
-#if CONFIG_SENSOR_HUB_IMU_ENABLE || CONFIG_SENSOR_HUB_VL53L1X_ENABLE
 #define HUB_I2C_SDA_GPIO CONFIG_SENSOR_HUB_I2C_SDA_GPIO
 #define HUB_I2C_SCL_GPIO CONFIG_SENSOR_HUB_I2C_SCL_GPIO
 #define HUB_I2C_SPEED_HZ CONFIG_SENSOR_HUB_I2C_SPEED_HZ
-#endif
 
 static void print_status(const char *name, esp_err_t ret)
 {
     printf("%s init: %s\n", name, ret == ESP_OK ? "OK" : "FAIL");
 }
 
-#if CONFIG_SENSOR_HUB_BU_UWB_ENABLE
 static void print_hex(const uint8_t *data, int len)
 {
     printf("[BU_UWB][HEX]");
@@ -100,16 +95,12 @@ static void handle_bu_uwb_rx(const uint8_t *data, int len)
         }
     }
 }
-#endif
 
 void app_main(void)
 {
     printf("\nAutobox sensor hub test start\n");
-#if CONFIG_SENSOR_HUB_IMU_ENABLE || CONFIG_SENSOR_HUB_VL53L1X_ENABLE
     printf("Default I2C: SDA=GPIO%d SCL=GPIO%d\n", HUB_I2C_SDA_GPIO, HUB_I2C_SCL_GPIO);
-#endif
 
-#if CONFIG_SENSOR_HUB_IMU_ENABLE || CONFIG_SENSOR_HUB_VL53L1X_ENABLE
     i2c_master_bus_handle_t shared_i2c = NULL;
     const i2c_master_bus_config_t i2c_bus_cfg = {
         .i2c_port = HUB_I2C_PORT,
@@ -121,45 +112,35 @@ void app_main(void)
     };
     print_status("shared_i2c",
                  i2c_new_master_bus(&i2c_bus_cfg, &shared_i2c));
-#endif
 
-#if CONFIG_SENSOR_HUB_A02YYUW_ENABLE
     static a02yyuw_t a02_1;
     a02yyuw_config_t a02_cfg = a02yyuw_default_config(
         (uart_port_t)CONFIG_SENSOR_HUB_A02YYUW_UART,
         CONFIG_SENSOR_HUB_A02YYUW_RX_GPIO,
         CONFIG_SENSOR_HUB_A02YYUW_TX_GPIO);
     a02_cfg.baudrate = CONFIG_SENSOR_HUB_A02YYUW_BAUDRATE;
-#ifdef CONFIG_SENSOR_HUB_A02YYUW_USE_SW_UART
     a02_cfg.use_sw_uart = true;
-#endif
     print_status("a02yyuw#1", a02yyuw_init_dev(&a02_1, &a02_cfg));
     printf("[A02YYUW#1] %s%d RX=GPIO%d baud=%d\n",
            a02_cfg.use_sw_uart ? "SW-UART" : "HW-UART",
            a02_cfg.use_sw_uart ? 0 : CONFIG_SENSOR_HUB_A02YYUW_UART,
            CONFIG_SENSOR_HUB_A02YYUW_RX_GPIO,
            a02_cfg.baudrate);
-#endif
 
-#if CONFIG_SENSOR_HUB_A02YYUW2_ENABLE
     static a02yyuw_t a02_2;
     a02yyuw_config_t a02b_cfg = a02yyuw_default_config(
         (uart_port_t)CONFIG_SENSOR_HUB_A02YYUW2_UART,
         CONFIG_SENSOR_HUB_A02YYUW2_RX_GPIO,
         CONFIG_SENSOR_HUB_A02YYUW2_TX_GPIO);
     a02b_cfg.baudrate = CONFIG_SENSOR_HUB_A02YYUW2_BAUDRATE;
-#ifdef CONFIG_SENSOR_HUB_A02YYUW2_USE_SW_UART
     a02b_cfg.use_sw_uart = true;
-#endif
     print_status("a02yyuw#2", a02yyuw_init_dev(&a02_2, &a02b_cfg));
     printf("[A02YYUW#2] %s%d RX=GPIO%d baud=%d\n",
            a02b_cfg.use_sw_uart ? "SW-UART" : "HW-UART",
            a02b_cfg.use_sw_uart ? 0 : CONFIG_SENSOR_HUB_A02YYUW2_UART,
            CONFIG_SENSOR_HUB_A02YYUW2_RX_GPIO,
            a02b_cfg.baudrate);
-#endif
 
-#if CONFIG_SENSOR_HUB_BU_UWB_ENABLE
     bu_uwb_config_t bu_cfg = bu_uwb_default_config(
         (uart_port_t)CONFIG_SENSOR_HUB_BU_UWB_UART,
         CONFIG_SENSOR_HUB_BU_UWB_RX_GPIO,
@@ -170,16 +151,12 @@ void app_main(void)
            CONFIG_SENSOR_HUB_BU_UWB_RX_GPIO,
            CONFIG_SENSOR_HUB_BU_UWB_TX_GPIO,
            bu_cfg.baudrate);
-#endif
 
-#if CONFIG_SENSOR_HUB_FSR_ENABLE
     fsr_adc_config_t fsr_cfg = fsr_adc_default_config();
     fsr_cfg.adc_gpio = CONFIG_SENSOR_HUB_FSR_ADC_GPIO;
     fsr_cfg.adc_channel = (adc_channel_t)CONFIG_SENSOR_HUB_FSR_ADC_CHANNEL;
     print_status("fsr_adc", fsr_adc_init(&fsr_cfg));
-#endif
 
-#if CONFIG_SENSOR_HUB_RPLIDAR_ENABLE
     static rplidar_c1_t lidar;
     static bool lidar_scan_active;
     rplidar_c1_config_t lidar_cfg = rplidar_c1_default_config(
@@ -225,9 +202,7 @@ void app_main(void)
         print_status("rplidar_start_scan", scan_ret);
         lidar_scan_active = (scan_ret == ESP_OK);
     }
-#endif
 
-#if CONFIG_SENSOR_HUB_IMU_ENABLE
     static imu_i2c_t imu;
     imu_i2c_config_t imu_cfg = imu_i2c_default_config();
     imu_cfg.sda_gpio = HUB_I2C_SDA_GPIO;
@@ -253,9 +228,7 @@ void app_main(void)
                    imu_cfg.device_address);
         }
     }
-#endif
 
-#if CONFIG_SENSOR_HUB_VL53L1X_ENABLE
     static vl53l1x_tof_t tof;
     vl53l1x_tof_config_t tof_cfg = vl53l1x_tof_default_config();
     tof_cfg.sda_gpio = HUB_I2C_SDA_GPIO;
@@ -266,10 +239,8 @@ void app_main(void)
     tof_cfg.inter_measurement_ms = CONFIG_SENSOR_HUB_VL53L1X_INTER_MEASUREMENT_MS;
     tof_cfg.external_bus = shared_i2c;
     print_status("vl53l1x_tof", vl53l1x_tof_init(&tof, &tof_cfg));
-#endif
 
     while (1) {
-#if CONFIG_SENSOR_HUB_A02YYUW_ENABLE
         a02yyuw_reading_t a02 = {0};
         if (a02yyuw_read_dev(&a02_1, &a02, 150) == ESP_OK && a02.valid) {
             printf("[A02YYUW#1] distance=%d mm\n", a02.distance_mm);
@@ -277,9 +248,7 @@ void app_main(void)
             printf("[A02YYUW#1] no valid frame (RX=GPIO%d)\n",
                    CONFIG_SENSOR_HUB_A02YYUW_RX_GPIO);
         }
-#endif
 
-#if CONFIG_SENSOR_HUB_A02YYUW2_ENABLE
         a02yyuw_reading_t a02b = {0};
         if (a02yyuw_read_dev(&a02_2, &a02b, 150) == ESP_OK && a02b.valid) {
             printf("[A02YYUW#2] distance=%d mm\n", a02b.distance_mm);
@@ -287,9 +256,7 @@ void app_main(void)
             printf("[A02YYUW#2] no valid frame (RX=GPIO%d)\n",
                    CONFIG_SENSOR_HUB_A02YYUW2_RX_GPIO);
         }
-#endif
 
-#if CONFIG_SENSOR_HUB_BU_UWB_ENABLE
         static uint32_t bu_no_data_count;
         uint8_t bu_rx[128] = {0};
         int bu_len = 0;
@@ -302,9 +269,7 @@ void app_main(void)
                    CONFIG_SENSOR_HUB_BU_UWB_RX_GPIO,
                    CONFIG_SENSOR_HUB_BU_UWB_BAUDRATE);
         }
-#endif
 
-#if CONFIG_SENSOR_HUB_FSR_ENABLE
         fsr_adc_reading_t fsr = {0};
         if (fsr_adc_read(&fsr) == ESP_OK && fsr.valid) {
             printf("[FSR] raw=%d voltage=%.3fV force_est_kg=%.2f\n",
@@ -312,9 +277,7 @@ void app_main(void)
                    fsr.voltage_v,
                    fsr.weight_kg);
         }
-#endif
 
-#if CONFIG_SENSOR_HUB_RPLIDAR_ENABLE
         static uint32_t lidar_no_point_count;
         rplidar_c1_point_t point = {0};
         bool got_point = false;
@@ -349,9 +312,7 @@ void app_main(void)
             printf("[RPLIDAR][WAIT] no valid scan point; check rotation, 5V current, ESP_RX=GPIO%d <- lidar TX\n",
                    CONFIG_SENSOR_HUB_RPLIDAR_RX_GPIO);
         }
-#endif
 
-#if CONFIG_SENSOR_HUB_IMU_ENABLE
         imu_i2c_reading_t imu_data = {0};
         if (imu_i2c_read_all(&imu, &imu_data) == ESP_OK && imu_data.valid) {
             printf("[IMU] accel=%.3f %.3f %.3f g euler=%.2f %.2f %.2f deg\n",
@@ -367,15 +328,12 @@ void app_main(void)
                    HUB_I2C_SCL_GPIO,
                    IMU_I2C_DEFAULT_ADDR);
         }
-#endif
 
-#if CONFIG_SENSOR_HUB_VL53L1X_ENABLE
         vl53l1x_tof_reading_t tof_reading = {0};
         if (vl53l1x_tof_read(&tof, &tof_reading, 250) == ESP_OK &&
             tof_reading.valid) {
             printf("[VL53L1X] distance=%u mm\n", tof_reading.distance_mm);
         }
-#endif
 
         vTaskDelay(pdMS_TO_TICKS(500));
     }

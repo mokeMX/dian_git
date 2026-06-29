@@ -3,22 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef ESP_PLATFORM
 #include "driver/i2c_master.h"
 #include "esp_err.h"
-#else
-typedef int esp_err_t;
-#define ESP_OK 0
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-typedef void *i2c_master_bus_handle_t;
-typedef void *i2c_master_dev_handle_t;
-typedef int i2c_port_num_t;
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define IMU_I2C_DEFAULT_ADDR 0x23
 
@@ -54,7 +40,3 @@ esp_err_t imu_i2c_init(imu_i2c_t *imu, const imu_i2c_config_t *config);
 void imu_i2c_deinit(imu_i2c_t *imu);
 esp_err_t imu_i2c_read_version(imu_i2c_t *imu, uint8_t version[3]);
 esp_err_t imu_i2c_read_all(imu_i2c_t *imu, imu_i2c_reading_t *out);
-
-#ifdef __cplusplus
-}
-#endif

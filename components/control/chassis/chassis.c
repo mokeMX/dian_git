@@ -100,12 +100,10 @@ chassis_config_t chassis_default_config(void)
     cfg.esc_mid_us = 1500;
     cfg.esc_max_us = 2000;
     cfg.pwm_resolution_bits = 14;
-#ifdef ESP_PLATFORM
     cfg.ledc_speed_mode = 0; /* LEDC_LOW_SPEED_MODE */
     cfg.ledc_timer = 0;      /* LEDC_TIMER_0 */
     cfg.left_ledc_channel = 0;
     cfg.right_ledc_channel = 1;
-#endif
     cfg.left_esc_gpio = 4;
     cfg.right_esc_gpio = 5;
     cfg.left_invert = false;
@@ -136,7 +134,6 @@ chassis_config_t chassis_default_config(void)
 /* ===================================================================== *
  * ESP target implementation.                                            *
  * ===================================================================== */
-#ifdef ESP_PLATFORM
 
 #include "driver/gpio.h"
 #include "driver/ledc.h"
@@ -547,59 +544,3 @@ void chassis_deinit(chassis_t *ch)
               (ledc_channel_t)ch->cfg.right_ledc_channel, 0);
     ch->initialized = false;
 }
-
-#else /* !ESP_PLATFORM : PC stubs so kinematics + PID can be unit-tested ----- */
-
-esp_err_t chassis_init(chassis_t *ch, const chassis_config_t *cfg)
-{
-    (void)ch;
-    (void)cfg;
-    return ESP_ERR_INVALID_STATE;
-}
-void chassis_deinit(chassis_t *ch) { (void)ch; }
-esp_err_t chassis_set_velocity(chassis_t *ch, float v, float w)
-{
-    (void)ch;
-    (void)v;
-    (void)w;
-    return ESP_ERR_INVALID_STATE;
-}
-esp_err_t chassis_set_wheel_speeds(chassis_t *ch, float l, float r)
-{
-    (void)ch;
-    (void)l;
-    (void)r;
-    return ESP_ERR_INVALID_STATE;
-}
-esp_err_t chassis_set_pulse_us(chassis_t *ch, int l, int r)
-{
-    (void)ch;
-    (void)l;
-    (void)r;
-    return ESP_ERR_INVALID_STATE;
-}
-esp_err_t chassis_update(chassis_t *ch, float dt)
-{
-    (void)ch;
-    (void)dt;
-    return ESP_ERR_INVALID_STATE;
-}
-void chassis_get_measured(chassis_t *ch, float *v, float *w, float *l, float *r)
-{
-    (void)ch;
-    (void)v;
-    (void)w;
-    (void)l;
-    (void)r;
-}
-void chassis_get_odometry(chassis_t *ch, float *x, float *y, float *yaw)
-{
-    (void)ch;
-    (void)x;
-    (void)y;
-    (void)yaw;
-}
-void chassis_stop(chassis_t *ch) { (void)ch; }
-void chassis_brake(chassis_t *ch) { (void)ch; }
-
-#endif /* ESP_PLATFORM */

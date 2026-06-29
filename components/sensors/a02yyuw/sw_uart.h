@@ -4,21 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef ESP_PLATFORM
 #include "esp_err.h"
 #include "esp_timer.h"
-#else
-typedef int esp_err_t;
-#define ESP_OK 0
-#define ESP_FAIL -1
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-#define ESP_ERR_NO_MEM 0x101
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define SW_UART_MAX_RX_BUF 1024
 
@@ -57,7 +44,3 @@ esp_err_t sw_uart_init(sw_uart_t *uart, const sw_uart_config_t *config);
 int sw_uart_read_bytes(sw_uart_t *uart, uint8_t *buf, int max_len, uint32_t timeout_ms);
 void sw_uart_flush(sw_uart_t *uart);
 void sw_uart_deinit(sw_uart_t *uart);
-
-#ifdef __cplusplus
-}
-#endif

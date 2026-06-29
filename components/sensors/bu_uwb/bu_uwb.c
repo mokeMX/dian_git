@@ -4,17 +4,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef ESP_PLATFORM
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#endif
 
-#ifdef ESP_PLATFORM
 static const char *TAG = "bu_uwb";
 static bu_uwb_config_t s_config;
 static bool s_initialized;
-#endif
 
 bu_uwb_config_t bu_uwb_default_config(uart_port_t uart_port,
                                       int rx_gpio,
@@ -217,7 +213,6 @@ const char *bu_uwb_line_payload(const char *line)
     }
 }
 
-#ifdef ESP_PLATFORM
 esp_err_t bu_uwb_init(const bu_uwb_config_t *config)
 {
     if (config == NULL || config->rx_gpio < 0 || config->tx_gpio < 0) {
@@ -385,47 +380,3 @@ void bu_uwb_deinit(void)
         s_initialized = false;
     }
 }
-#else
-esp_err_t bu_uwb_init(const bu_uwb_config_t *config)
-{
-    (void)config;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t bu_uwb_send_command(const char *command)
-{
-    (void)command;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t bu_uwb_read_bytes(uint8_t *data,
-                            size_t data_size,
-                            int *out_len,
-                            uint32_t timeout_ms)
-{
-    (void)data;
-    (void)data_size;
-    (void)out_len;
-    (void)timeout_ms;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t bu_uwb_read_line(char *line, size_t line_size, uint32_t timeout_ms)
-{
-    (void)line;
-    (void)line_size;
-    (void)timeout_ms;
-    return ESP_ERR_INVALID_STATE;
-}
-
-esp_err_t bu_uwb_request_distance(bu_uwb_distance_t *out, uint32_t timeout_ms)
-{
-    (void)out;
-    (void)timeout_ms;
-    return ESP_ERR_INVALID_STATE;
-}
-
-void bu_uwb_deinit(void)
-{
-}
-#endif

@@ -32,10 +32,6 @@
 
 #include <stdbool.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Max histogram resolution. 72 sectors over a 180 deg FOV = 2.5 deg each. */
 #define FA_MAX_SECTORS 72
 
@@ -167,7 +163,3 @@ fa_output_t fa_update(fa_ctx_t *ctx, const fa_target_t *target,
 
 /* Small helper exposed for tests: wrap an angle to [-PI, PI]. */
 float fa_wrap_pi(float a);
-
-#ifdef __cplusplus
-}
-#endif

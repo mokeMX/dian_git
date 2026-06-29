@@ -39,58 +39,22 @@
 #include "chassis.h"
 #include "follow_avoid.h"
 
-#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
 #include "driver/i2c_master.h"
 #include "imu_i2c.h"
-#endif
 
 static const char *TAG = "follow_robot";
 
-#ifndef M_PI
 #define M_PI 3.14159265358979323846
-#endif
 #define DEG2RAD(d) ((float)(d) * (float)M_PI / 180.0f)
 
-/* Kconfig 'bool' symbols are left #undef when disabled, so normalise them to
- * concrete values usable in C expressions. */
-#ifdef CONFIG_FOLLOW_ROBOT_MOTOR_LEFT_INVERT
 #define FR_LEFT_INVERT true
-#else
-#define FR_LEFT_INVERT false
-#endif
-#ifdef CONFIG_FOLLOW_ROBOT_MOTOR_RIGHT_INVERT
 #define FR_RIGHT_INVERT true
-#else
-#define FR_RIGHT_INVERT false
-#endif
-#ifdef CONFIG_FOLLOW_ROBOT_LEFT_ENC_INVERT
 #define FR_LEFT_ENC_INVERT true
-#else
-#define FR_LEFT_ENC_INVERT false
-#endif
-#ifdef CONFIG_FOLLOW_ROBOT_RIGHT_ENC_INVERT
 #define FR_RIGHT_ENC_INVERT true
-#else
-#define FR_RIGHT_ENC_INVERT false
-#endif
-#ifdef CONFIG_FOLLOW_ROBOT_UWB_LEFT_IS_POS_X
 #define FR_UWB_LEFT_SIGN 1.0f
-#else
-#define FR_UWB_LEFT_SIGN -1.0f
-#endif
-#ifdef CONFIG_FOLLOW_ROBOT_HEADING_HOLD
 #define FR_HEADING_HOLD true
-#else
-#define FR_HEADING_HOLD false
-#endif
-#ifdef CONFIG_FOLLOW_ROBOT_IMU_YAW_INVERT
 #define FR_IMU_YAW_SIGN -1.0f
-#else
-#define FR_IMU_YAW_SIGN 1.0f
-#endif
-#ifndef CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI
 #define CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI 0
-#endif
 
 #define LIDAR_SECTORS 36                 /* 5 deg per sector over 180 deg FOV */
 #define LIDAR_FOV_RAD ((float)M_PI)
@@ -173,9 +137,7 @@ static void uwb_task(void *arg)
 static float lidar_angle_to_body_rad(float raw_deg)
 {
     float rel = raw_deg - (float)CONFIG_FOLLOW_ROBOT_LIDAR_FORWARD_DEG;
-#if CONFIG_FOLLOW_ROBOT_LIDAR_CW
     rel = -rel; /* lidar CW -> body CCW-positive */
-#endif
     while (rel > 180.0f) {
         rel -= 360.0f;
     }
@@ -241,7 +203,6 @@ static void ultra_task(void *arg)
 }
 
 /* ----------------------------------------------------- IMU (heading loop) */
-#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
 static imu_i2c_t s_imu;
 static bool s_imu_ok = false;
 
@@ -260,7 +221,6 @@ static bool imu_read_yaw(float *yaw_rad)
     *yaw_rad = FR_IMU_YAW_SIGN * DEG2RAD(r.euler_deg[2]);
     return true;
 }
-#endif
 
 /* ----------------------------------------------------- Control loop */
 
@@ -326,13 +286,11 @@ static void control_task(void *arg)
     fa_ctx_t fa;
     fa_init(&fa, NULL);
     fa.cfg = build_fa_config();
-#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
     const float max_omega = fa.cfg.max_angular_rps;
     const float heading_kp = CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI / 1000.0f;
     const bool heading_hold = FR_HEADING_HOLD;
     float yaw_ref = 0.0f;       /* IMU heading reference (rad) */
     bool yaw_ref_set = false;
-#endif
 
     const TickType_t period = pdMS_TO_TICKS(1000 / CONFIG_FOLLOW_ROBOT_CONTROL_HZ);
     TickType_t last_wake = xTaskGetTickCount();
@@ -376,7 +334,6 @@ static void control_task(void *arg)
          * caster scrub. Only active while genuinely tracking the user
          * (FOLLOW/AVOID); during SEARCH/ESTOP the robot must rotate freely. */
         float omega_cmd = out.omega_rps;
-#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
         const bool tracking =
             (out.state == FA_STATE_FOLLOW || out.state == FA_STATE_AVOID);
         float yaw_meas;
@@ -396,7 +353,6 @@ static void control_task(void *arg)
         } else {
             yaw_ref_set = false; /* re-seed the reference next time we re-acquire */
         }
-#endif
 
         chassis_set_velocity(chassis, out.v_mps, omega_cmd);
         chassis_update(chassis, dt);
@@ -496,7 +452,6 @@ void app_main(void)
         ESP_LOGE(TAG, "ultrasonic R init FAILED");
     }
 
-#if CONFIG_FOLLOW_ROBOT_IMU_ENABLE
     /* IMU drives the heading loop; failure here is non-fatal (loop falls back to
      * the open omega command). */
     static i2c_master_bus_handle_t i2c_bus;
@@ -522,7 +477,6 @@ void app_main(void)
             ESP_LOGE(TAG, "imu init FAILED - heading loop disabled");
         }
     }
-#endif
 
     /* --- Control loop owns the chassis from here on --- */
     xTaskCreate(control_task, "control", 4096, &s_chassis, 7, NULL);

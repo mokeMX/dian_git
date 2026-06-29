@@ -3,9 +3,7 @@
 #include <math.h>
 #include <string.h>
 
-#ifndef M_PI
 #define M_PI 3.14159265358979323846
-#endif
 
 /* ------------------------------------------------------------ small helpers */
 
@@ -269,7 +267,7 @@ fa_output_t fa_update(fa_ctx_t *ctx, const fa_target_t *target,
     const float ul = (ultra_left && ultra_left->valid) ? ultra_left->dist_m
                                                        : FA_NO_OBSTACLE;
     const float ur = (ultra_right && ultra_right->valid) ? ultra_right->dist_m
-                                                         : FA_NO_OBSTACLE;
+                                                          : FA_NO_OBSTACLE;
     if (ul < clearance) {
         clearance = ul;
     }

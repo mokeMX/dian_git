@@ -10,9 +10,7 @@
 #include "chassis.h"
 #include "follow_avoid.h"
 
-#ifndef M_PI
 #define M_PI 3.14159265358979323846
-#endif
 
 static int approx(float a, float b, float tol) { return fabsf(a - b) < tol; }
 

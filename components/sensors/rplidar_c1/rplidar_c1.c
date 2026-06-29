@@ -3,10 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifdef ESP_PLATFORM
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#endif
 
 #define RPLIDAR_START_BYTE 0xA5
 #define RPLIDAR_CMD_STOP 0x25
@@ -48,7 +46,6 @@ rplidar_c1_config_t rplidar_c1_default_config(uart_port_t uart_port,
     return config;
 }
 
-#ifdef ESP_PLATFORM
 static esp_err_t send_cmd(rplidar_c1_t *lidar, uint8_t cmd)
 {
     if (lidar == NULL || !lidar->initialized) {
@@ -305,48 +302,3 @@ bool rplidar_c1_read_point(rplidar_c1_t *lidar, rplidar_c1_point_t *point)
     }
     return false;
 }
-#else
-esp_err_t rplidar_c1_init(rplidar_c1_t *lidar,
-                          const rplidar_c1_config_t *config)
-{
-    (void)lidar;
-    (void)config;
-    return ESP_ERR_INVALID_STATE;
-}
-
-void rplidar_c1_deinit(rplidar_c1_t *lidar) { (void)lidar; }
-void rplidar_c1_stop(rplidar_c1_t *lidar) { (void)lidar; }
-void rplidar_c1_reset(rplidar_c1_t *lidar) { (void)lidar; }
-esp_err_t rplidar_c1_get_health(rplidar_c1_t *lidar,
-                                uint8_t *status,
-                                uint16_t *error_code)
-{
-    (void)lidar;
-    (void)status;
-    (void)error_code;
-    return ESP_ERR_INVALID_STATE;
-}
-esp_err_t rplidar_c1_get_info(rplidar_c1_t *lidar, rplidar_c1_info_t *info)
-{
-    (void)lidar;
-    (void)info;
-    return ESP_ERR_INVALID_STATE;
-}
-esp_err_t rplidar_c1_set_motor_speed(rplidar_c1_t *lidar, uint16_t rpm)
-{
-    (void)lidar;
-    (void)rpm;
-    return ESP_ERR_INVALID_STATE;
-}
-esp_err_t rplidar_c1_start_scan(rplidar_c1_t *lidar)
-{
-    (void)lidar;
-    return ESP_ERR_INVALID_STATE;
-}
-bool rplidar_c1_read_point(rplidar_c1_t *lidar, rplidar_c1_point_t *point)
-{
-    (void)lidar;
-    (void)point;
-    return false;
-}
-#endif

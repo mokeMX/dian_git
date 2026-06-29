@@ -35,21 +35,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef ESP_PLATFORM
 #include "esp_err.h"
-#else
-typedef int esp_err_t;
-#ifndef ESP_OK
-#define ESP_OK 0
-#define ESP_FAIL -1
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-#endif
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* ===================================================================== PID */
 /*
@@ -215,7 +201,3 @@ void chassis_brake(chassis_t *ch);
 void chassis_diff_drive_mix(float v_mps, float omega_rps, float track_width_m,
                             float max_speed_mps, float *left_duty,
                             float *right_duty);
-
-#ifdef __cplusplus
-}
-#endif

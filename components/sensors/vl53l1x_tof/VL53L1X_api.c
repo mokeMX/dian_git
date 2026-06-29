@@ -18,45 +18,6 @@
 #include "VL53L1X_api.h"
 #include <string.h>
 
-#if 0
-uint8_t VL51L1X_NVM_CONFIGURATION[] = {
-0x00, /* 0x00 : not user-modifiable */
-0x29, /* 0x01 : 7 bits I2C address (default=0x29), use SetI2CAddress(). Warning: after changing the register value to a new I2C address, the device will only answer to the new address */
-0x00, /* 0x02 : not user-modifiable */
-0x00, /* 0x03 : not user-modifiable */
-0x00, /* 0x04 : not user-modifiable */
-0x00, /* 0x05 : not user-modifiable */
-0x00, /* 0x06 : not user-modifiable */
-0x00, /* 0x07 : not user-modifiable */
-0x00, /* 0x08 : not user-modifiable */
-0x50, /* 0x09 : not user-modifiable */
-0x00, /* 0x0A : not user-modifiable */
-0x00, /* 0x0B : not user-modifiable */
-0x00, /* 0x0C : not user-modifiable */
-0x00, /* 0x0D : not user-modifiable */
-0x0a, /* 0x0E : not user-modifiable */
-0x00, /* 0x0F : not user-modifiable */
-0x00, /* 0x10 : not user-modifiable */
-0x00, /* 0x11 : not user-modifiable */
-0x00, /* 0x12 : not user-modifiable */
-0x00, /* 0x13 : not user-modifiable */
-0x00, /* 0x14 : not user-modifiable */
-0x00, /* 0x15 : not user-modifiable */
-0x00, /* 0x16 : Xtalk calibration value MSB (7.9 format in kcps), use SetXtalk() */
-0x00, /* 0x17 : Xtalk calibration value LSB */
-0x00, /* 0x18 : not user-modifiable */
-0x00, /* 0x19 : not user-modifiable */
-0x00, /* 0x1a : not user-modifiable */
-0x00, /* 0x1b : not user-modifiable */
-0x00, /* 0x1e : Part to Part offset x4 MSB (in mm), use SetOffset() */
-0x50, /* 0x1f : Part to Part offset x4 LSB */
-0x00, /* 0x20 : not user-modifiable */
-0x00, /* 0x21 : not user-modifiable */
-0x00, /* 0x22 : not user-modifiable */
-0x00, /* 0x23 : not user-modifiable */
-}
-#endif
-
 const uint8_t VL51L1X_DEFAULT_CONFIGURATION[] = {
 0x00, /* 0x2d : set bit 2 and 5 to 1 for fast plus mode (1MHz I2C), else don't touch */
 0x00, /* 0x2e : bit 0 if I2C pulled up at 1.8V, else set bit 0 to 1 (pull up at AVDD) */

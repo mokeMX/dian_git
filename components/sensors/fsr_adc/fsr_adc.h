@@ -3,22 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef ESP_PLATFORM
 #include "esp_err.h"
 #include "hal/adc_types.h"
-#else
-typedef int esp_err_t;
-#define ESP_OK 0
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_INVALID_STATE 0x103
-typedef int adc_channel_t;
-typedef int adc_atten_t;
-#define ADC_ATTEN_DB_12 3
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 typedef struct {
     float slope_v_per_kg;
@@ -50,7 +36,3 @@ float fsr_adc_voltage_to_weight_kg(float voltage_v,
 esp_err_t fsr_adc_init(const fsr_adc_config_t *config);
 esp_err_t fsr_adc_read(fsr_adc_reading_t *out);
 void fsr_adc_deinit(void);
-
-#ifdef __cplusplus
-}
-#endif

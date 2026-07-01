@@ -381,59 +381,82 @@ static a02yyuw_t s_ultra_right;
 static chassis_t s_chassis;
 static ultra_arg_t s_ua_left = {.dev = &s_ultra_left, .is_left = true};
 static ultra_arg_t s_ua_right = {.dev = &s_ultra_right, .is_left = false};
-
 void app_main(void)
 {
+    // 打印系统启动日志，标明当前运行的是“算法2（闭环控制）”版本的跟随程序
     ESP_LOGI(TAG, "Follow-me suitcase (算法2, closed-loop) starting");
 
+    /* --- 1. 全局共享状态初始化 --- */
+    // 清空全局共享结构体，该结构体用于在多个传感器任务和控制任务之间传递数据
     memset(&g_shared, 0, sizeof(g_shared));
+    // 创建一个互斥锁(Mutex)，用于保护 g_shared，防止多任务并发读写时出现数据竞态(Data Race)
     g_shared.lock = xSemaphoreCreateMutex();
+    // 初始化避障势场/障碍物地图，传入雷达的扇区数量和视场角(FOV)
     fa_obstacle_reset(&g_shared.field, LIDAR_SECTORS, LIDAR_FOV_RAD);
 
-    /* --- Chassis (ESC + encoder closed loop) --- */
-    chassis_config_t cc = build_chassis_config();
+    /* --- 2. 底盘系统初始化 (ESC电调 + 编码器闭环) --- */
+    chassis_config_t cc = build_chassis_config(); // 获取底盘硬件配置（如引脚分配、PID参数等）
     if (chassis_init(&s_chassis, &cc) == ESP_OK) {
-        chassis_stop(&s_chassis);
+        chassis_stop(&s_chassis); // 确保初始化后电机处于停止/中立状态
+        
+        // 【关键步骤】无刷电机电调(ESC)在上电时需要一段持续的中立位PWM信号进行“解锁(Arming)”，否则无法驱动。
         ESP_LOGI(TAG, "chassis ready; arming ESC (hold neutral %d ms)",
                  CONFIG_FOLLOW_ROBOT_ESC_ARM_MS);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_FOLLOW_ROBOT_ESC_ARM_MS));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_FOLLOW_ROBOT_ESC_ARM_MS)); // 阻塞延时，等待解锁完成
     } else {
+        // 如果初始化失败，通常是GPIO配置冲突或接线错误
         ESP_LOGE(TAG, "chassis init FAILED - check ESC/encoder GPIOs");
     }
 
-    /* --- UWB target --- */
+    /* --- 3. UWB (超宽带) 目标定位模块初始化 --- */
+    // UWB用于精准获取跟随目标（主人带的标签）的相对距离和角度
+    // 配置UWB使用的硬件串口（通常是 UART1）及引脚
     bu_uwb_config_t bu = bu_uwb_default_config(
         (uart_port_t)CONFIG_FOLLOW_ROBOT_UWB_UART,
         CONFIG_FOLLOW_ROBOT_UWB_RX_GPIO, CONFIG_FOLLOW_ROBOT_UWB_TX_GPIO);
     bu.baudrate = CONFIG_FOLLOW_ROBOT_UWB_BAUD;
+    
     if (bu_uwb_init(&bu) == ESP_OK) {
+        // 创建独立任务处理UWB数据解算。堆栈4096字节，优先级设为6（较高优先级，确保定位实时性）
         xTaskCreate(uwb_task, "uwb", 4096, NULL, 6, NULL);
         ESP_LOGI(TAG, "uwb ready (RX=GPIO%d)", CONFIG_FOLLOW_ROBOT_UWB_RX_GPIO);
     } else {
         ESP_LOGE(TAG, "uwb init FAILED");
     }
 
-    /* --- Lidar --- */
+    /* --- 4. 激光雷达 (Lidar) 模块初始化 --- */
+    // 雷达用于扫描周围环境，构建点云进行中远距离避障
+    // 配置雷达使用的硬件串口（通常是 UART2）及引脚
     rplidar_c1_config_t lc = rplidar_c1_default_config(
         (uart_port_t)CONFIG_FOLLOW_ROBOT_LIDAR_UART,
         CONFIG_FOLLOW_ROBOT_LIDAR_RX_GPIO, CONFIG_FOLLOW_ROBOT_LIDAR_TX_GPIO);
     lc.baudrate = CONFIG_FOLLOW_ROBOT_LIDAR_BAUD;
+    
+    // 初始化并发送开始扫描指令
     if (rplidar_c1_init(&s_lidar, &lc) == ESP_OK &&
         rplidar_c1_start_scan(&s_lidar) == ESP_OK) {
+        // 创建雷达数据解析任务，堆栈4096，优先级6（与UWB同级）
         xTaskCreate(lidar_task, "lidar", 4096, &s_lidar, 6, NULL);
         ESP_LOGI(TAG, "lidar scanning");
     } else {
+        // 容错处理：如果雷达损坏或未接入，系统不崩溃，而是退化为仅依靠超声波进行近距离避障
         ESP_LOGE(TAG, "lidar init/scan FAILED - avoidance falls back to ultrasonics");
     }
 
-    /* --- Ultrasonics (front corners) ---
-     * Both run on the per-instance software UART: the two hardware UARTs are
-     * taken by UWB (UART1) and the lidar (UART2), and A02YYUW only needs 9600
-     * baud, which the bit-bang UART handles comfortably. */
+    /* --- 5. 超声波传感器 (行李箱前方左右边角) 初始化 --- 
+     * 【硬件资源调度策略说明】：
+     * ESP32的可用硬件串口有限。由于 UART1 分给了 UWB，UART2 分给了 Lidar，
+     * 剩下的 UART0 通常用于系统日志烧录(Console)。
+     * 但超声波模块 (A02YYUW) 的波特率仅要求 9600，速度很慢。
+     * 因此，这里巧妙地使用了软件模拟串口 (bit-bang/sw_uart) 来节省硬件串口资源。 */
+    
+    // 5.1 左侧超声波配置
     a02yyuw_config_t ulcfg = a02yyuw_default_config(
-        (uart_port_t)0, CONFIG_FOLLOW_ROBOT_ULTRA_LEFT_RX_GPIO, -1);
-    ulcfg.use_sw_uart = true;
+        (uart_port_t)0, CONFIG_FOLLOW_ROBOT_ULTRA_LEFT_RX_GPIO, -1); // 仅需RX引脚接收数据
+    ulcfg.use_sw_uart = true; // 强制启用软件模拟串口
+    
     if (a02yyuw_init_dev(&s_ultra_left, &ulcfg) == ESP_OK) {
+        // 创建左超声波轮询任务，堆栈3072，优先级5（略低于核心传感器）
         xTaskCreate(ultra_task, "ultra_l", 3072, &s_ua_left, 5, NULL);
         ESP_LOGI(TAG, "ultrasonic L ready (RX=GPIO%d)",
                  CONFIG_FOLLOW_ROBOT_ULTRA_LEFT_RX_GPIO);
@@ -441,10 +464,13 @@ void app_main(void)
         ESP_LOGE(TAG, "ultrasonic L init FAILED");
     }
 
+    // 5.2 右侧超声波配置
     a02yyuw_config_t urcfg = a02yyuw_default_config(
         (uart_port_t)0, CONFIG_FOLLOW_ROBOT_ULTRA_RIGHT_RX_GPIO, -1);
-    urcfg.use_sw_uart = true; /* second ultrasonic uses the bit-bang UART */
+    urcfg.use_sw_uart = true; // 同样使用软件模拟串口
+    
     if (a02yyuw_init_dev(&s_ultra_right, &urcfg) == ESP_OK) {
+        // 创建右超声波轮询任务，优先级5
         xTaskCreate(ultra_task, "ultra_r", 3072, &s_ua_right, 5, NULL);
         ESP_LOGI(TAG, "ultrasonic R ready (RX=GPIO%d)",
                  CONFIG_FOLLOW_ROBOT_ULTRA_RIGHT_RX_GPIO);
@@ -452,25 +478,31 @@ void app_main(void)
         ESP_LOGE(TAG, "ultrasonic R init FAILED");
     }
 
-    /* IMU drives the heading loop; failure here is non-fatal (loop falls back to
-     * the open omega command). */
+    /* --- 6. IMU (惯性测量单元) 初始化 --- */
+    // IMU提供航向角(Heading)反馈，防止行李箱在跟随或避障时走偏。
+    // 如果初始化失败属于“非致命错误”，控制循环将退化为开环角速度控制（open omega command）。
+    
     static i2c_master_bus_handle_t i2c_bus;
+    // 配置I2C主机总线参数
     i2c_master_bus_config_t i2c_cfg = {
         .i2c_port = 0,
         .sda_io_num = CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO,
         .scl_io_num = CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO,
         .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
+        .glitch_ignore_cnt = 7,                 // 硬件滤波抗干扰
+        .flags.enable_internal_pullup = true,   // 启用内部上拉电阻
     };
+    
     if (i2c_new_master_bus(&i2c_cfg, &i2c_bus) == ESP_OK) {
         imu_i2c_config_t imucfg = imu_i2c_default_config();
         imucfg.sda_gpio = CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO;
         imucfg.scl_gpio = CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO;
         imucfg.device_address = CONFIG_FOLLOW_ROBOT_IMU_ADDR;
         imucfg.external_bus = i2c_bus;
+        
         if (imu_i2c_init(&s_imu, &imucfg) == ESP_OK) {
-            s_imu_ok = true;
+            s_imu_ok = true; // 标记IMU就绪
+            // 打印航向闭环(Heading Hold)是否在宏定义中被开启
             ESP_LOGI(TAG, "imu ready (heading loop %s)",
                      FR_HEADING_HOLD ? "ON" : "off");
         } else {
@@ -478,7 +510,9 @@ void app_main(void)
         }
     }
 
-    /* --- Control loop owns the chassis from here on --- */
+    /* --- 7. 核心控制循环启动 --- */
+    // 当所有传感器任务就绪并开始往共享内存(g_shared)填充数据后，启动控制大脑。
+    // 创建控制任务，优先级设为7（全场最高优先级，确保控制指令实时输出到底盘）。
     xTaskCreate(control_task, "control", 4096, &s_chassis, 7, NULL);
     ESP_LOGI(TAG, "control loop running at %d Hz", CONFIG_FOLLOW_ROBOT_CONTROL_HZ);
 }

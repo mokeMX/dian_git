@@ -9,8 +9,8 @@ config SENSOR_HUB_A02YYUW_USE_SW_UART
     default y
     depends on SENSOR_HUB_A02YYUW_ENABLE
     help
-        All sensors must run simultaneously so A02YYUW #1 now defaults to SW
-        UART, freeing hardware UART1 for BU UWB. The IO35 pin is unchanged.
+        All sensors must run simultaneously so A02YYUW #1 defaults to SW
+        UART, freeing hardware UART1 for BU UWB.
 
 config SENSOR_HUB_A02YYUW_UART
     int "A02YYUW #1 hardware UART port"
@@ -19,7 +19,7 @@ config SENSOR_HUB_A02YYUW_UART
 
 config SENSOR_HUB_A02YYUW_RX_GPIO
     int "A02YYUW #1 ESP32 RX GPIO"
-    default 35
+    default 4
     depends on SENSOR_HUB_A02YYUW_ENABLE
 
 config SENSOR_HUB_A02YYUW_TX_GPIO
@@ -48,7 +48,7 @@ config SENSOR_HUB_A02YYUW2_UART
 
 config SENSOR_HUB_A02YYUW2_RX_GPIO
     int "A02YYUW #2 ESP32 RX GPIO"
-    default 36
+    default 5
     depends on SENSOR_HUB_A02YYUW2_ENABLE
 
 config SENSOR_HUB_A02YYUW2_TX_GPIO
@@ -90,7 +90,7 @@ config SENSOR_HUB_FSR_ENABLE
     default y
 
 config SENSOR_HUB_FSR_ADC_GPIO
-    int "FSR ADC GPIO, used for logs and wiring docs"
+    int "FSR ADC GPIO"
     default 8
     depends on SENSOR_HUB_FSR_ENABLE
 
@@ -100,18 +100,18 @@ config SENSOR_HUB_FSR_ADC_CHANNEL
     depends on SENSOR_HUB_FSR_ENABLE
 
 config SENSOR_HUB_I2C_SDA_GPIO
-    int "Shared I2C SDA GPIO"
+    int "Shared SW-I2C SDA GPIO"
     default 11
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
 
 config SENSOR_HUB_I2C_SCL_GPIO
-    int "Shared I2C SCL GPIO"
+    int "Shared SW-I2C SCL GPIO"
     default 12
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
 
 config SENSOR_HUB_I2C_SPEED_HZ
-    int "Shared I2C clock speed"
-    default 400000
+    int "Shared SW-I2C clock speed"
+    default 100000
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
 
 config SENSOR_HUB_IMU_ADDR

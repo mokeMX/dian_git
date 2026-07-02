@@ -15,15 +15,13 @@ static vl53l1x_tof_t *s_active_sensor;
 vl53l1x_tof_config_t vl53l1x_tof_default_config(void)
 {
     vl53l1x_tof_config_t config = {
-        .i2c_port = 0,
-        .sda_gpio = 39,
-        .scl_gpio = 38,
+        .sda_gpio = 11,
+        .scl_gpio = 12,
         .scl_speed_hz = 400000,
         .device_address_8bit = VL53L1X_TOF_DEFAULT_ADDR_8BIT,
         .timing_budget_ms = 50,
         .inter_measurement_ms = 55,
         .distance_mode = VL53L1X_TOF_DISTANCE_LONG,
-        .external_bus = NULL,
     };
     return config;
 }
@@ -55,12 +53,9 @@ int8_t VL53L1_WriteMulti(uint16_t dev,
     buf[1] = (uint8_t)(index & 0xFF);
     memcpy(&buf[2], pdata, count);
 
-    return i2c_master_transmit(s_active_sensor->dev,
-                               buf,
-                               count + 2,
-                               100) == ESP_OK
-               ? 0
-               : -1;
+    return sw_i2c_write(&s_active_sensor->sw_i2c,
+                        s_active_sensor->device_address_7bit,
+                        buf, count + 2) == ESP_OK ? 0 : -1;
 }
 
 int8_t VL53L1_ReadMulti(uint16_t dev,
@@ -76,14 +71,10 @@ int8_t VL53L1_ReadMulti(uint16_t dev,
         (uint8_t)(index >> 8),
         (uint8_t)(index & 0xFF),
     };
-    return i2c_master_transmit_receive(s_active_sensor->dev,
-                                       reg,
-                                       sizeof(reg),
-                                       pdata,
-                                       count,
-                                       100) == ESP_OK
-               ? 0
-               : -1;
+    return sw_i2c_write_read(&s_active_sensor->sw_i2c,
+                             s_active_sensor->device_address_7bit,
+                             reg, sizeof(reg),
+                             pdata, count) == ESP_OK ? 0 : -1;
 }
 
 int8_t VL53L1_WrByte(uint16_t dev, uint16_t index, uint8_t data)
@@ -155,34 +146,11 @@ esp_err_t vl53l1x_tof_init(vl53l1x_tof_t *sensor,
 
     memset(sensor, 0, sizeof(*sensor));
     sensor->config = *config;
+    sensor->device_address_7bit = config->device_address_8bit >> 1;
 
-    if (config->external_bus != NULL) {
-        sensor->bus = config->external_bus;
-        sensor->owns_bus = false;
-    } else {
-        const i2c_master_bus_config_t bus_cfg = {
-            .i2c_port = config->i2c_port,
-            .sda_io_num = config->sda_gpio,
-            .scl_io_num = config->scl_gpio,
-            .clk_source = I2C_CLK_SRC_DEFAULT,
-            .glitch_ignore_cnt = 7,
-            .flags.enable_internal_pullup = true,
-        };
-        esp_err_t ret = i2c_new_master_bus(&bus_cfg, &sensor->bus);
-        if (ret != ESP_OK) {
-            return ret;
-        }
-        sensor->owns_bus = true;
-    }
-
-    const i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = config->device_address_8bit >> 1,
-        .scl_speed_hz = config->scl_speed_hz,
-    };
-    esp_err_t ret = i2c_master_bus_add_device(sensor->bus, &dev_cfg, &sensor->dev);
+    esp_err_t ret = sw_i2c_init(&sensor->sw_i2c, config->sda_gpio, config->scl_gpio,
+                                config->scl_speed_hz);
     if (ret != ESP_OK) {
-        vl53l1x_tof_deinit(sensor);
         return ret;
     }
 
@@ -265,12 +233,7 @@ void vl53l1x_tof_deinit(vl53l1x_tof_t *sensor)
     if (sensor == NULL) {
         return;
     }
-    if (sensor->dev != NULL) {
-        i2c_master_bus_rm_device(sensor->dev);
-    }
-    if (sensor->owns_bus && sensor->bus != NULL) {
-        i2c_del_master_bus(sensor->bus);
-    }
+    sw_i2c_deinit(&sensor->sw_i2c);
     if (s_active_sensor == sensor) {
         s_active_sensor = NULL;
     }

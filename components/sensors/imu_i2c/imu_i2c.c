@@ -2,23 +2,21 @@
 
 #include <string.h>
 
-#define IMU_FUNC_VERSION 0x01
-#define IMU_FUNC_RAW_ACCEL 0x04
-#define IMU_FUNC_RAW_GYRO 0x0A
-#define IMU_FUNC_RAW_MAG 0x10
-#define IMU_FUNC_QUAT 0x16
-#define IMU_FUNC_EULER 0x26
-#define IMU_FUNC_BARO 0x32
+#define IMU_FUNC_VERSION    0x01
+#define IMU_FUNC_RAW_ACCEL  0x04
+#define IMU_FUNC_RAW_GYRO   0x0A
+#define IMU_FUNC_RAW_MAG    0x10
+#define IMU_FUNC_QUAT       0x16
+#define IMU_FUNC_EULER      0x26
+#define IMU_FUNC_BARO       0x32
 
 imu_i2c_config_t imu_i2c_default_config(void)
 {
     imu_i2c_config_t config = {
-        .i2c_port = 0,
-        .sda_gpio = 38,
-        .scl_gpio = 37,
-        .scl_speed_hz = 400000,
+        .sda_gpio = 11,
+        .scl_gpio = 12,
+        .scl_speed_hz = 100000,
         .device_address = IMU_I2C_DEFAULT_ADDR,
-        .external_bus = NULL,
     };
     return config;
 }
@@ -38,12 +36,8 @@ static float le_float(const uint8_t *bytes)
 #ifdef ESP_PLATFORM
 static esp_err_t read_reg(imu_i2c_t *imu, uint8_t reg, uint8_t *buf, size_t len)
 {
-    return i2c_master_transmit_receive(imu->dev,
-                                       &reg,
-                                       1,
-                                       buf,
-                                       len,
-                                       100);
+    return sw_i2c_write_read(&imu->sw_i2c, imu->device_address,
+                             &reg, 1, buf, len);
 }
 
 esp_err_t imu_i2c_init(imu_i2c_t *imu, const imu_i2c_config_t *config)
@@ -54,37 +48,11 @@ esp_err_t imu_i2c_init(imu_i2c_t *imu, const imu_i2c_config_t *config)
 
     memset(imu, 0, sizeof(*imu));
     imu->config = *config;
+    imu->device_address = config->device_address;
 
-    if (config->external_bus != NULL) {
-        imu->bus = config->external_bus;
-        imu->owns_bus = false;
-    } else {
-        const i2c_master_bus_config_t bus_cfg = {
-            .i2c_port = config->i2c_port,
-            .sda_io_num = config->sda_gpio,
-            .scl_io_num = config->scl_gpio,
-            .clk_source = I2C_CLK_SRC_DEFAULT,
-            .glitch_ignore_cnt = 7,
-            .flags.enable_internal_pullup = true,
-        };
-        esp_err_t ret = i2c_new_master_bus(&bus_cfg, &imu->bus);
-        if (ret != ESP_OK) {
-            return ret;
-        }
-        imu->owns_bus = true;
-    }
-
-    const i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = config->device_address,
-        .scl_speed_hz = config->scl_speed_hz,
-    };
-    esp_err_t ret = i2c_master_bus_add_device(imu->bus, &dev_cfg, &imu->dev);
+    esp_err_t ret = sw_i2c_init(&imu->sw_i2c, config->sda_gpio, config->scl_gpio,
+                                config->scl_speed_hz);
     if (ret != ESP_OK) {
-        if (imu->owns_bus) {
-            i2c_del_master_bus(imu->bus);
-        }
-        memset(imu, 0, sizeof(*imu));
         return ret;
     }
 
@@ -97,12 +65,7 @@ void imu_i2c_deinit(imu_i2c_t *imu)
     if (imu == NULL || !imu->initialized) {
         return;
     }
-    if (imu->dev != NULL) {
-        i2c_master_bus_rm_device(imu->dev);
-    }
-    if (imu->owns_bus && imu->bus != NULL) {
-        i2c_del_master_bus(imu->bus);
-    }
+    sw_i2c_deinit(&imu->sw_i2c);
     memset(imu, 0, sizeof(*imu));
 }
 

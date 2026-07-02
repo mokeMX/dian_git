@@ -4,5 +4,5 @@ idf_component_register(
         "VL53L1X_api.c"
         "VL53L1X_calibration.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_driver_i2c
+    REQUIRES sw_i2c
 )

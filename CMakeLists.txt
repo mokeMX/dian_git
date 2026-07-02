@@ -7,6 +7,7 @@ set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/components/sensors/rplidar_c1"
     "${CMAKE_CURRENT_LIST_DIR}/components/sensors/imu_i2c"
     "${CMAKE_CURRENT_LIST_DIR}/components/sensors/vl53l1x_tof"
+    "${CMAKE_CURRENT_LIST_DIR}/components/sensors/sw_i2c"
     "${CMAKE_CURRENT_LIST_DIR}/examples/sensor_hub/main"
 )
 

@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 #ifdef ESP_PLATFORM
-#include "driver/i2c_master.h"
 #include "esp_err.h"
+#include "sw_i2c.h"
 #else
 typedef int esp_err_t;
 #define ESP_OK 0
@@ -13,9 +13,6 @@ typedef int esp_err_t;
 #define ESP_ERR_INVALID_ARG 0x102
 #define ESP_ERR_INVALID_STATE 0x103
 #define ESP_ERR_TIMEOUT 0x107
-typedef void *i2c_master_bus_handle_t;
-typedef void *i2c_master_dev_handle_t;
-typedef int i2c_port_num_t;
 #endif
 
 #ifdef __cplusplus
@@ -31,7 +28,6 @@ typedef enum {
 } vl53l1x_tof_distance_mode_t;
 
 typedef struct {
-    i2c_port_num_t i2c_port;
     int sda_gpio;
     int scl_gpio;
     uint32_t scl_speed_hz;
@@ -39,7 +35,6 @@ typedef struct {
     uint16_t timing_budget_ms;
     uint16_t inter_measurement_ms;
     vl53l1x_tof_distance_mode_t distance_mode;
-    i2c_master_bus_handle_t external_bus;
 } vl53l1x_tof_config_t;
 
 typedef struct {
@@ -49,9 +44,8 @@ typedef struct {
 
 typedef struct {
     vl53l1x_tof_config_t config;
-    i2c_master_bus_handle_t bus;
-    i2c_master_dev_handle_t dev;
-    bool owns_bus;
+    sw_i2c_t sw_i2c;
+    uint8_t device_address_7bit;
     bool initialized;
 } vl53l1x_tof_t;
 

@@ -4,16 +4,14 @@
 #include <stdint.h>
 
 #ifdef ESP_PLATFORM
-#include "driver/i2c_master.h"
 #include "esp_err.h"
+#include "sw_i2c.h"
 #else
 typedef int esp_err_t;
 #define ESP_OK 0
 #define ESP_ERR_INVALID_ARG 0x102
 #define ESP_ERR_INVALID_STATE 0x103
-typedef void *i2c_master_bus_handle_t;
-typedef void *i2c_master_dev_handle_t;
-typedef int i2c_port_num_t;
+#define ESP_ERR_TIMEOUT 0x107
 #endif
 
 #ifdef __cplusplus
@@ -23,12 +21,10 @@ extern "C" {
 #define IMU_I2C_DEFAULT_ADDR 0x23
 
 typedef struct {
-    i2c_port_num_t i2c_port;
     int sda_gpio;
     int scl_gpio;
     uint32_t scl_speed_hz;
     uint8_t device_address;
-    i2c_master_bus_handle_t external_bus;
 } imu_i2c_config_t;
 
 typedef struct {
@@ -43,9 +39,8 @@ typedef struct {
 
 typedef struct {
     imu_i2c_config_t config;
-    i2c_master_bus_handle_t bus;
-    i2c_master_dev_handle_t dev;
-    bool owns_bus;
+    sw_i2c_t sw_i2c;
+    uint8_t device_address;
     bool initialized;
 } imu_i2c_t;
 

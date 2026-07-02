@@ -8,5 +8,5 @@ idf_component_register(
         rplidar_c1
         imu_i2c
         vl53l1x_tof
-        esp_driver_i2c
+        sw_i2c
 )

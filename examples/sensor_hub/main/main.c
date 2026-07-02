@@ -10,21 +10,28 @@
 #include "a02yyuw.h"
 #include "bu_uwb.h"
 #include "fsr_adc.h"
+#include "sw_i2c.h"
 #include "imu_i2c.h"
 #include "rplidar_c1.h"
 #include "vl53l1x_tof.h"
 
 /* ================================================================
- * Pin / hardware constants  (unchanged from original defaults)
+ * Pin / hardware constants (YD-ESP32-S3 V1.4 adapted)
  *
- * Key resolution: A02YYUW #1 moved from HW UART1 → SW UART (same
- * IO35 pin) to free UART1 for BU UWB.  All other pins identical to
- * 传感器修改4.
+ * I2C: Uses software bit-bang I2C for IMU (GPIO39/GPIO38).
+ *      VL53L1X ToF still uses HW I2C0 on separate pins (i2c_port=1 unused).
+ * UART: HW UART1 for UWB (RX=GPIO6, TX=GPIO7).
+ *       HW UART2 for RPLIDAR (RX=GPIO17, TX=GPIO18).
+ *       SW UART for A02YYUW ultrasonics (RX=GPIO4, GPIO5).
+ * ADC: ADC1_CH7 (GPIO8) for FSR.
  * ================================================================ */
-#define HUB_I2C_PORT           0
-#define HUB_I2C_SDA_GPIO      39  // 注意: 经典ESP32中GPIO39是仅输入的，无法作为SDA。ESP32-S3则可以。
-#define HUB_I2C_SCL_GPIO      38
-#define HUB_I2C_SPEED_HZ      400000
+#define HUB_SW_I2C_SDA_GPIO   39
+#define HUB_SW_I2C_SCL_GPIO   38
+#define HUB_SW_I2C_SPEED_HZ   100000
+#define HUB_HW_I2C_PORT        0
+#define HUB_HW_I2C_SDA_GPIO   (-1)
+#define HUB_HW_I2C_SCL_GPIO   (-1)
+#define HUB_HW_I2C_SPEED_HZ   400000
 
 #define A02_1_RX_GPIO         4
 #define A02_1_TX_GPIO         (-1)
@@ -58,7 +65,8 @@
 #define VL53L1X_INTER_MEASUREMENT_MS  55
 
 /* ---- shared resources ------------------------------------------*/
-static i2c_master_bus_handle_t g_shared_i2c;
+static sw_i2c_t g_sw_i2c;
+static i2c_master_bus_handle_t g_hw_i2c;
 
 static a02yyuw_t g_a02_1;
 static a02yyuw_t g_a02_2;
@@ -321,19 +329,26 @@ static void task_vl53l1x(void *pvParameters)
  * ================================================================ */
 void app_main(void)
 {
-    printf("\nAutobox sensor hub test start\n");
-    printf("Default I2C: SDA=GPIO%d SCL=GPIO%d\n", HUB_I2C_SDA_GPIO, HUB_I2C_SCL_GPIO);
+    printf("\nAutobox sensor hub test start (YD-ESP32-S3 adapted)\n");
+    printf("SW I2C (IMU): SDA=GPIO%d SCL=GPIO%d\n", HUB_SW_I2C_SDA_GPIO, HUB_SW_I2C_SCL_GPIO);
 
-    /* ---- shared I2C bus ----------------------------------------*/
-    const i2c_master_bus_config_t i2c_bus_cfg = {
-        .i2c_port = HUB_I2C_PORT,
-        .sda_io_num = HUB_I2C_SDA_GPIO,
-        .scl_io_num = HUB_I2C_SCL_GPIO,
+    /* ---- SW I2C bus for IMU ------------------------------------*/
+    sw_i2c_config_t sw_cfg = sw_i2c_default_config(
+        (gpio_num_t)HUB_SW_I2C_SDA_GPIO,
+        (gpio_num_t)HUB_SW_I2C_SCL_GPIO);
+    sw_cfg.clk_speed_hz = HUB_SW_I2C_SPEED_HZ;
+    print_status("sw_i2c", sw_i2c_init(&g_sw_i2c, &sw_cfg));
+
+    /* ---- HW I2C bus for VL53L1X (separate bus) -----------------*/
+    i2c_master_bus_config_t i2c_hw_cfg = {
+        .i2c_port = HUB_HW_I2C_PORT,
+        .sda_io_num = HUB_HW_I2C_SDA_GPIO,
+        .scl_io_num = HUB_HW_I2C_SCL_GPIO,
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
     };
-    print_status("shared_i2c", i2c_new_master_bus(&i2c_bus_cfg, &g_shared_i2c));
+    i2c_new_master_bus(&i2c_hw_cfg, &g_hw_i2c);
 
     /* ---- A02YYUW #1 (IO35, SW-UART) ----------------------------*/
     a02yyuw_config_t a02_cfg = a02yyuw_default_config((uart_port_t)A02_1_UART_PORT, A02_1_RX_GPIO, A02_1_TX_GPIO);
@@ -394,14 +409,13 @@ void app_main(void)
         g_lidar_scan_active = (scan_ret == ESP_OK);
     }
 
-    /* ---- IMU (I2C0, addr 0x23) ---------------------------------*/
+    /* ---- IMU (SW I2C, addr 0x23) -------------------------------*/
     imu_i2c_config_t imu_cfg = imu_i2c_default_config();
-    imu_cfg.sda_gpio = HUB_I2C_SDA_GPIO;
-    imu_cfg.scl_gpio = HUB_I2C_SCL_GPIO;
-    imu_cfg.scl_speed_hz = HUB_I2C_SPEED_HZ;
+    imu_cfg.sda_gpio = (gpio_num_t)HUB_SW_I2C_SDA_GPIO;
+    imu_cfg.scl_gpio = (gpio_num_t)HUB_SW_I2C_SCL_GPIO;
+    imu_cfg.scl_speed_hz = HUB_SW_I2C_SPEED_HZ;
     imu_cfg.device_address = IMU_I2C_ADDR;
-    imu_cfg.external_bus = g_shared_i2c;
-    esp_err_t imu_ret = imu_i2c_init(&g_imu, &imu_cfg);
+    esp_err_t imu_ret = imu_i2c_init(&g_imu, &imu_cfg, &g_sw_i2c);
     print_status("imu_i2c", imu_ret);
     
     if (imu_ret == ESP_OK) {
@@ -415,15 +429,28 @@ void app_main(void)
         }
     }
 
-    /* ---- VL53L1X ToF (shared I2C0, addr 0x52) ------------------*/
+    /* ---- VL53L1X ToF (HW I2C0, GPIO11/12, addr 0x52) -------------
+     * NOTE: Use separate HW I2C pins since SW I2C is taken by IMU.
+     * GPIO11=J1 pin 17, GPIO12=J1 pin 18 on YD-ESP32-S3. */
+    i2c_master_bus_handle_t tof_i2c;
+    const i2c_master_bus_config_t tof_bus_cfg = {
+        .i2c_port = 0,
+        .sda_io_num = 11,
+        .scl_io_num = 12,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+    print_status("tof_hw_i2c", i2c_new_master_bus(&tof_bus_cfg, &tof_i2c));
+
     vl53l1x_tof_config_t tof_cfg = vl53l1x_tof_default_config();
-    tof_cfg.sda_gpio = HUB_I2C_SDA_GPIO;
-    tof_cfg.scl_gpio = HUB_I2C_SCL_GPIO;
-    tof_cfg.scl_speed_hz = HUB_I2C_SPEED_HZ;
+    tof_cfg.sda_gpio = 11;
+    tof_cfg.scl_gpio = 12;
+    tof_cfg.scl_speed_hz = HUB_HW_I2C_SPEED_HZ;
     tof_cfg.device_address_8bit = VL53L1X_ADDR_8BIT;
     tof_cfg.timing_budget_ms = VL53L1X_TIMING_BUDGET_MS;
     tof_cfg.inter_measurement_ms = VL53L1X_INTER_MEASUREMENT_MS;
-    tof_cfg.external_bus = g_shared_i2c;
+    tof_cfg.external_bus = tof_i2c;
     print_status("vl53l1x_tof", vl53l1x_tof_init(&g_tof, &tof_cfg));
 
     // /* ---- launch all sensor tasks -------------------------------*/

@@ -1,5 +1,11 @@
 /*
- * follow_robot (算法2) - smart follow-me suitcase with CLOSED-LOOP drive.
+ * follow_robot (算法5e) - YD-ESP32-S3 SW I2C + closed-loop follow-me suitcase.
+ *
+ * 迁移说明 (Migration from 算法4):
+ *   - 目标硬件: YD-ESP32-S3 V1.4 核心板
+ *   - I2C 变更: 硬件 I2C 替换为软件 bit-bang I2C (sw_i2c), 不依赖 ESP-IDF I2C 驱动
+ *   - 引脚映射: 适配 YD-ESP32-S3 J1/J2 排针布局 (详见 Kconfig)
+ *   - 其他: 传感器驱动、控制算法、闭环底盘逻辑保持不变
  *
  * Wiring of the sensing/acting stack:
  *   UWB (BU0x)      -> follow target  (range + bearing to the user's tag)
@@ -7,11 +13,6 @@
  *   2x A02YYUW      -> front-corner near-field safety (ultrasonic)
  *   IMU             -> heading closed-loop (yaw error trims the turn command)
  *   chassis         -> rear diff-drive: APO-DL ESC (RC PWM) + AB encoder PID
- *
- * Difference vs 算法1: the chassis is now closed-loop. It drives the real ESCs
- * with RC servo pulses and runs a per-wheel PID on the AB encoders, and the
- * control loop closes a heading loop with the IMU. So commanded (v, omega) are
- * actually tracked instead of being an open-loop duty guess.
  *
  * Architecture: each sensor runs in its own FreeRTOS task and publishes into a
  * mutex-protected snapshot. A fixed-rate control task reads the snapshot, runs
@@ -38,8 +39,7 @@
 #include "rplidar_c1.h"
 #include "chassis.h"
 #include "follow_avoid.h"
-
-#include "driver/i2c_master.h"
+#include "sw_i2c.h"
 #include "imu_i2c.h"
 
 static const char *TAG = "follow_robot";
@@ -384,7 +384,7 @@ static ultra_arg_t s_ua_right = {.dev = &s_ultra_right, .is_left = false};
 void app_main(void)
 {
     // 打印系统启动日志，标明当前运行的是“算法2（闭环控制）”版本的跟随程序
-    ESP_LOGI(TAG, "Follow-me suitcase (算法2, closed-loop) starting");
+    ESP_LOGI(TAG, "Follow-me suitcase (算法5e, YD-ESP32-S3 SW I2C, closed-loop) starting");
 
     /* --- 1. 全局共享状态初始化 --- */
     // 清空全局共享结构体，该结构体用于在多个传感器任务和控制任务之间传递数据
@@ -482,32 +482,32 @@ void app_main(void)
     // IMU提供航向角(Heading)反馈，防止行李箱在跟随或避障时走偏。
     // 如果初始化失败属于“非致命错误”，控制循环将退化为开环角速度控制（open omega command）。
     
-    static i2c_master_bus_handle_t i2c_bus;
-    // 配置I2C主机总线参数
-    i2c_master_bus_config_t i2c_cfg = {
-        .i2c_port = 0,
-        .sda_io_num = CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO,
-        .scl_io_num = CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,                 // 硬件滤波抗干扰
-        .flags.enable_internal_pullup = true,   // 启用内部上拉电阻
-    };
-    
-    if (i2c_new_master_bus(&i2c_cfg, &i2c_bus) == ESP_OK) {
+    static sw_i2c_t s_sw_i2c;
+    sw_i2c_config_t sw_cfg = sw_i2c_default_config(
+        (gpio_num_t)CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO,
+        (gpio_num_t)CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO);
+    sw_cfg.clk_speed_hz = CONFIG_FOLLOW_ROBOT_I2C_SPEED_HZ;
+    sw_cfg.device_address = (uint8_t)CONFIG_FOLLOW_ROBOT_IMU_ADDR;
+
+    if (sw_i2c_init(&s_sw_i2c, &sw_cfg) == ESP_OK) {
         imu_i2c_config_t imucfg = imu_i2c_default_config();
-        imucfg.sda_gpio = CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO;
-        imucfg.scl_gpio = CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO;
-        imucfg.device_address = CONFIG_FOLLOW_ROBOT_IMU_ADDR;
-        imucfg.external_bus = i2c_bus;
-        
-        if (imu_i2c_init(&s_imu, &imucfg) == ESP_OK) {
-            s_imu_ok = true; // 标记IMU就绪
-            // 打印航向闭环(Heading Hold)是否在宏定义中被开启
-            ESP_LOGI(TAG, "imu ready (heading loop %s)",
-                     FR_HEADING_HOLD ? "ON" : "off");
+        imucfg.sda_gpio = (gpio_num_t)CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO;
+        imucfg.scl_gpio = (gpio_num_t)CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO;
+        imucfg.scl_speed_hz = CONFIG_FOLLOW_ROBOT_I2C_SPEED_HZ;
+        imucfg.device_address = (uint8_t)CONFIG_FOLLOW_ROBOT_IMU_ADDR;
+
+        if (imu_i2c_init(&s_imu, &imucfg, &s_sw_i2c) == ESP_OK) {
+            s_imu_ok = true;
+            ESP_LOGI(TAG, "imu ready (heading loop %s, SW I2C SDA=GPIO%d SCL=GPIO%d @%dHz)",
+                     FR_HEADING_HOLD ? "ON" : "off",
+                     CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO,
+                     CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO,
+                     CONFIG_FOLLOW_ROBOT_I2C_SPEED_HZ);
         } else {
             ESP_LOGE(TAG, "imu init FAILED - heading loop disabled");
         }
+    } else {
+        ESP_LOGE(TAG, "SW I2C bus init FAILED - IMU unavailable");
     }
 
     /* --- 7. 核心控制循环启动 --- */

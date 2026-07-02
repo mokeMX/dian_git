@@ -1,17 +1,19 @@
-menu "Follow-me suitcase 算法2 (closed-loop follow + obstacle avoidance)"
+menu "Follow-me suitcase 算法5e (YD-ESP32-S3 + SW I2C + closed-loop)"
 
-comment "--- Drive motors (rear diff-drive: APO-DL ESC + RC PWM, 算法2) ---"
+comment "--- Drive motors (rear diff-drive: APO-DL ESC + RC PWM) ---"
 
 config FOLLOW_ROBOT_LEFT_ESC_GPIO
     int "Left ESC signal GPIO (RC PWM out)"
     default 4
     help
         RC servo-pulse output to the rear-LEFT ESC (50 Hz, 1000-2000 us).
-        Matches the standalone 动力轮代码 branch (GPIO4).
+        YD-ESP32-S3: J1 pin 4 (GPIO4).
 
 config FOLLOW_ROBOT_RIGHT_ESC_GPIO
     int "Right ESC signal GPIO (RC PWM out)"
     default 5
+    help
+        YD-ESP32-S3: J1 pin 5 (GPIO5).
 
 config FOLLOW_ROBOT_MOTOR_LEFT_INVERT
     bool "Invert left motor direction (flip forward/reverse pulse)"
@@ -37,20 +39,28 @@ config FOLLOW_ROBOT_ESC_ARM_MS
     int "Hold neutral this long at boot so the ESC arms (ms)"
     default 2000
 
-comment "--- AB encoders (closed-loop speed feedback, 算法2) ---"
+comment "--- AB encoders (closed-loop speed feedback) ---"
 
 config FOLLOW_ROBOT_LEFT_ENC_A_GPIO
     int "Left encoder A GPIO"
     default 6
+    help
+        YD-ESP32-S3: J1 pin 6 (GPIO6).
 config FOLLOW_ROBOT_LEFT_ENC_B_GPIO
     int "Left encoder B GPIO"
     default 7
+    help
+        YD-ESP32-S3: J1 pin 7 (GPIO7).
 config FOLLOW_ROBOT_RIGHT_ENC_A_GPIO
     int "Right encoder A GPIO"
     default 15
+    help
+        YD-ESP32-S3: J1 pin 8 (GPIO15).
 config FOLLOW_ROBOT_RIGHT_ENC_B_GPIO
     int "Right encoder B GPIO"
     default 16
+    help
+        YD-ESP32-S3: J1 pin 9 (GPIO16).
 config FOLLOW_ROBOT_LEFT_ENC_INVERT
     bool "Invert left encoder count sign"
     default n
@@ -151,11 +161,13 @@ config FOLLOW_ROBOT_UWB_LEFT_IS_POS_X
         maps +Xcm to the user's RIGHT, leave this disabled; enable it if +Xcm is
         to the LEFT. Used to build the follow bearing.
 
-comment "--- Sensor wiring (mirrors the sensor_hub example defaults) ---"
+comment "--- Sensor wiring (YD-ESP32-S3 V1.4 pinout) ---"
 
 config FOLLOW_ROBOT_UWB_UART
     int "BU UWB UART port"
     default 1
+    help
+        HW UART1. YD-ESP32-S3: RX=J1 pin 11 (GPIO18), TX=J1 pin 12 (GPIO8).
 config FOLLOW_ROBOT_UWB_RX_GPIO
     int "BU UWB ESP RX GPIO"
     default 18
@@ -169,6 +181,8 @@ config FOLLOW_ROBOT_UWB_BAUD
 config FOLLOW_ROBOT_LIDAR_UART
     int "RPLIDAR UART port"
     default 2
+    help
+        HW UART2. YD-ESP32-S3: RX=J1 pin 10 (GPIO17), TX=J1 pin 15 (GPIO9).
 config FOLLOW_ROBOT_LIDAR_RX_GPIO
     int "RPLIDAR ESP RX GPIO"
     default 17
@@ -179,16 +193,18 @@ config FOLLOW_ROBOT_LIDAR_BAUD
     int "RPLIDAR baudrate"
     default 460800
 
-# Both ultrasonics use the per-instance software (bit-bang) UART: the two
-# hardware UARTs are taken by UWB and the lidar. A02YYUW is 9600 baud, RX-only.
 config FOLLOW_ROBOT_ULTRA_LEFT_RX_GPIO
     int "Front-left ultrasonic (A02YYUW) RX GPIO (SW UART)"
     default 35
+    help
+        Software UART RX-only. YD-ESP32-S3: J2 pin 13 (GPIO35).
 config FOLLOW_ROBOT_ULTRA_RIGHT_RX_GPIO
     int "Front-right ultrasonic (A02YYUW) RX GPIO (SW UART)"
     default 36
+    help
+        Software UART RX-only. YD-ESP32-S3: J2 pin 12 (GPIO36).
 
-comment "--- IMU heading closed-loop (算法2) ---"
+comment "--- IMU heading closed-loop (算法5e: SW I2C bit-bang) ---"
 
 config FOLLOW_ROBOT_IMU_ENABLE
     bool "Use the IMU"
@@ -211,13 +227,23 @@ config FOLLOW_ROBOT_IMU_YAW_INVERT
     default n
     depends on FOLLOW_ROBOT_IMU_ENABLE
 config FOLLOW_ROBOT_I2C_SDA_GPIO
-    int "IMU I2C SDA GPIO"
+    int "IMU Software I2C SDA GPIO (bit-bang)"
     default 11
     depends on FOLLOW_ROBOT_IMU_ENABLE
+    help
+        YD-ESP32-S3 J1 pin 17 (GPIO11) for SDA.
 config FOLLOW_ROBOT_I2C_SCL_GPIO
-    int "IMU I2C SCL GPIO"
+    int "IMU Software I2C SCL GPIO (bit-bang)"
     default 12
     depends on FOLLOW_ROBOT_IMU_ENABLE
+    help
+        YD-ESP32-S3 J1 pin 18 (GPIO12) for SCL.
+config FOLLOW_ROBOT_I2C_SPEED_HZ
+    int "Software I2C clock speed (Hz)"
+    default 100000
+    depends on FOLLOW_ROBOT_IMU_ENABLE
+    help
+        Bit-bang I2C frequency. Recommended 100000 (100kHz) for standard mode.
 config FOLLOW_ROBOT_IMU_ADDR
     hex "IMU 7-bit I2C address"
     default 0x23

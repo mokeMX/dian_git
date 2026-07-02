@@ -1,5 +1,6 @@
 #include "imu_i2c.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #define IMU_FUNC_VERSION 0x01
@@ -13,12 +14,10 @@
 imu_i2c_config_t imu_i2c_default_config(void)
 {
     imu_i2c_config_t config = {
-        .i2c_port = 0,
-        .sda_gpio = 38,
-        .scl_gpio = 37,
-        .scl_speed_hz = 400000,
+        .sda_gpio = GPIO_NUM_11,
+        .scl_gpio = GPIO_NUM_12,
+        .scl_speed_hz = 100000,
         .device_address = IMU_I2C_DEFAULT_ADDR,
-        .external_bus = NULL,
     };
     return config;
 }
@@ -37,15 +36,11 @@ static float le_float(const uint8_t *bytes)
 
 static esp_err_t read_reg(imu_i2c_t *imu, uint8_t reg, uint8_t *buf, size_t len)
 {
-    return i2c_master_transmit_receive(imu->dev,
-                                       &reg,
-                                       1,
-                                       buf,
-                                       len,
-                                       100);
+    return sw_i2c_read_reg(imu->i2c, reg, buf, len);
 }
 
-esp_err_t imu_i2c_init(imu_i2c_t *imu, const imu_i2c_config_t *config)
+esp_err_t imu_i2c_init(imu_i2c_t *imu, const imu_i2c_config_t *config,
+                       sw_i2c_t *external_i2c)
 {
     if (imu == NULL || config == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -54,37 +49,25 @@ esp_err_t imu_i2c_init(imu_i2c_t *imu, const imu_i2c_config_t *config)
     memset(imu, 0, sizeof(*imu));
     imu->config = *config;
 
-    if (config->external_bus != NULL) {
-        imu->bus = config->external_bus;
-        imu->owns_bus = false;
+    if (external_i2c != NULL) {
+        imu->i2c = external_i2c;
+        imu->owns_i2c = false;
     } else {
-        const i2c_master_bus_config_t bus_cfg = {
-            .i2c_port = config->i2c_port,
-            .sda_io_num = config->sda_gpio,
-            .scl_io_num = config->scl_gpio,
-            .clk_source = I2C_CLK_SRC_DEFAULT,
-            .glitch_ignore_cnt = 7,
-            .flags.enable_internal_pullup = true,
-        };
-        esp_err_t ret = i2c_new_master_bus(&bus_cfg, &imu->bus);
+        imu->i2c = (sw_i2c_t *)malloc(sizeof(sw_i2c_t));
+        if (imu->i2c == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+        sw_i2c_config_t sw_cfg = sw_i2c_default_config(config->sda_gpio,
+                                                        config->scl_gpio);
+        sw_cfg.clk_speed_hz = config->scl_speed_hz;
+        sw_cfg.device_address = config->device_address;
+        esp_err_t ret = sw_i2c_init(imu->i2c, &sw_cfg);
         if (ret != ESP_OK) {
+            free(imu->i2c);
+            imu->i2c = NULL;
             return ret;
         }
-        imu->owns_bus = true;
-    }
-
-    const i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = config->device_address,
-        .scl_speed_hz = config->scl_speed_hz,
-    };
-    esp_err_t ret = i2c_master_bus_add_device(imu->bus, &dev_cfg, &imu->dev);
-    if (ret != ESP_OK) {
-        if (imu->owns_bus) {
-            i2c_del_master_bus(imu->bus);
-        }
-        memset(imu, 0, sizeof(*imu));
-        return ret;
+        imu->owns_i2c = true;
     }
 
     imu->initialized = true;
@@ -96,13 +79,19 @@ void imu_i2c_deinit(imu_i2c_t *imu)
     if (imu == NULL || !imu->initialized) {
         return;
     }
-    if (imu->dev != NULL) {
-        i2c_master_bus_rm_device(imu->dev);
-    }
-    if (imu->owns_bus && imu->bus != NULL) {
-        i2c_del_master_bus(imu->bus);
+    if (imu->owns_i2c && imu->i2c != NULL) {
+        sw_i2c_deinit(imu->i2c);
+        free(imu->i2c);
     }
     memset(imu, 0, sizeof(*imu));
+}
+
+bool imu_i2c_probe(imu_i2c_t *imu)
+{
+    if (imu == NULL || !imu->initialized) {
+        return false;
+    }
+    return sw_i2c_probe(imu->i2c, imu->config.device_address);
 }
 
 esp_err_t imu_i2c_read_version(imu_i2c_t *imu, uint8_t version[3])
@@ -154,7 +143,7 @@ esp_err_t imu_i2c_read_all(imu_i2c_t *imu, imu_i2c_reading_t *out)
         return ret;
     }
     out->quat[0] = le_float(&buf[0]);
-    out->quat[1] = le_float(&buf[4]);
+    out->quat[1] = le_float(&buf[2]);
     out->quat[2] = le_float(&buf[8]);
     out->quat[3] = le_float(&buf[12]);
 

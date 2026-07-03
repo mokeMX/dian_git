@@ -48,11 +48,11 @@
 
 // 选用硬件 UART 2，映射至 ESP32-S3 的普通 GPIO 上
 #define LIDAR_UART_PORT   UART_NUM_2
-#define LIDAR_TX_GPIO     17
-#define LIDAR_RX_GPIO     18
+#define LIDAR_TX_GPIO     18
+#define LIDAR_RX_GPIO     17
 
 void app_main(void) {
-    ESP_LOGI("MAIN", "正在启动思岚 C1M1 原生硬件驱动层...");
+   printf("MAIN: 正在启动思岚 C1M1 原生硬件驱动层...\n");
 
     // 1. 初始化 UART 硬件
     if (rplidar_init(LIDAR_UART_PORT, LIDAR_TX_GPIO, LIDAR_RX_GPIO) != ESP_OK) {

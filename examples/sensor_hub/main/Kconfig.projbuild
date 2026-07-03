@@ -72,12 +72,12 @@ config SENSOR_HUB_BU_UWB_UART
 
 config SENSOR_HUB_BU_UWB_RX_GPIO
     int "BU03/BU04 ESP32 RX GPIO"
-    default 6
+    default 18
     depends on SENSOR_HUB_BU_UWB_ENABLE
 
 config SENSOR_HUB_BU_UWB_TX_GPIO
     int "BU03/BU04 ESP32 TX GPIO"
-    default 7
+    default 37
     depends on SENSOR_HUB_BU_UWB_ENABLE
 
 config SENSOR_HUB_BU_UWB_BAUDRATE
@@ -101,12 +101,12 @@ config SENSOR_HUB_FSR_ADC_CHANNEL
 
 config SENSOR_HUB_I2C_SDA_GPIO
     int "Shared I2C SDA GPIO"
-    default 11
+    default 39
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
 
 config SENSOR_HUB_I2C_SCL_GPIO
     int "Shared I2C SCL GPIO"
-    default 12
+    default 38
     depends on SENSOR_HUB_IMU_ENABLE || SENSOR_HUB_VL53L1X_ENABLE
 
 config SENSOR_HUB_I2C_SPEED_HZ
@@ -135,7 +135,7 @@ config SENSOR_HUB_RPLIDAR_RX_GPIO
 
 config SENSOR_HUB_RPLIDAR_TX_GPIO
     int "RPLIDAR C1 ESP32 TX GPIO"
-    default 18
+    default 9
     depends on SENSOR_HUB_RPLIDAR_ENABLE
 
 config SENSOR_HUB_RPLIDAR_BAUDRATE

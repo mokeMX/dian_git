@@ -15,32 +15,36 @@
 #include "vl53l1x_tof.h"
 
 /* ================================================================
- * Pin / hardware constants  (unchanged from original defaults)
+ * Pin / hardware constants
  *
- * Key resolution: A02YYUW #1 moved from HW UART1 → SW UART (same
- * IO35 pin) to free UART1 for BU UWB.  All other pins identical to
- * 传感器修改4.
+ * 引脚映射与 follow_robot (算法4) 分支完全一致:
+ *   A02YYUW #1/2: SW-UART RX=GPIO35/36
+ *   BU UWB:       UART1, RX=GPIO18, TX=GPIO37
+ *   RPLIDAR:      UART2, RX=GPIO17, TX=GPIO9
+ *   IMU:          I2C0, SDA=GPIO39, SCL=GPIO38, addr=0x23
+ *   FSR:          ADC1, GPIO8 (无变化，算法4中无此传感器)
+ *   VL53L1X:      I2C0, addr=0x52 (无变化，算法4中无此传感器)
  * ================================================================ */
 #define HUB_I2C_PORT           0
-#define HUB_I2C_SDA_GPIO      39  // 注意: 经典ESP32中GPIO39是仅输入的，无法作为SDA。ESP32-S3则可以。
+#define HUB_I2C_SDA_GPIO      39
 #define HUB_I2C_SCL_GPIO      38
 #define HUB_I2C_SPEED_HZ      400000
 
-#define A02_1_RX_GPIO         4
+#define A02_1_RX_GPIO         35
 #define A02_1_TX_GPIO         (-1)
 #define A02_1_UART_PORT        1
 #define A02_1_BAUDRATE        9600
 #define A02_1_USE_SW_UART      1
 
-#define A02_2_RX_GPIO         5
+#define A02_2_RX_GPIO         36
 #define A02_2_TX_GPIO         (-1)
 #define A02_2_UART_PORT        2
 #define A02_2_BAUDRATE        9600
 #define A02_2_USE_SW_UART      1
 
 #define BU_UWB_UART_PORT       1
-#define BU_UWB_RX_GPIO         6
-#define BU_UWB_TX_GPIO         7
+#define BU_UWB_RX_GPIO         18
+#define BU_UWB_TX_GPIO         37
 #define BU_UWB_BAUDRATE        115200
 
 #define FSR_ADC_GPIO           8
@@ -48,7 +52,7 @@
 
 #define RPLIDAR_UART_PORT      2
 #define RPLIDAR_RX_GPIO       17
-#define RPLIDAR_TX_GPIO       18
+#define RPLIDAR_TX_GPIO       9
 #define RPLIDAR_BAUDRATE       460800
 
 #define IMU_I2C_ADDR           0x23
@@ -151,7 +155,7 @@ static void handle_bu_uwb_rx(const uint8_t *data, int len)
  * sensors output data simultaneously without blocking each other.
  * ================================================================ */
 
-/* ---- A02YYUW #1 (IO35, SW-UART) --------------------------------*/
+/* ---- A02YYUW #1 (GPIO35, SW-UART) ------------------------------*/
 static void task_a02yyuw1(void *pvParameters)
 {
     (void)pvParameters;
@@ -172,7 +176,7 @@ static void task_a02yyuw1(void *pvParameters)
     }
 }
 
-/* ---- A02YYUW #2 (IO36, SW-UART) --------------------------------*/
+/* ---- A02YYUW #2 (GPIO36, SW-UART) ------------------------------*/
 static void task_a02yyuw2(void *pvParameters)
 {
     (void)pvParameters;
@@ -193,7 +197,7 @@ static void task_a02yyuw2(void *pvParameters)
     }
 }
 
-/* ---- BU UWB (UART1, GPIO6/7) -----------------------------------*/
+/* ---- BU UWB (UART1, GPIO18/37) ---------------------------------*/
 static void task_bu_uwb(void *pvParameters)
 {
     (void)pvParameters;
@@ -235,7 +239,7 @@ static void task_fsr(void *pvParameters)
     }
 }
 
-/* ---- RPLIDAR C1 (UART2, GPIO17/18) -----------------------------*/
+/* ---- RPLIDAR C1 (UART2, GPIO17/9) ------------------------------*/
 static void task_rplidar(void *pvParameters)
 {
     (void)pvParameters;
@@ -349,7 +353,7 @@ void app_main(void)
     print_status("a02yyuw#2", a02yyuw_init_dev(&g_a02_2, &a02b_cfg));
     printf("[A02YYUW#2] SW-UART RX=GPIO%d baud=%d\n", A02_2_RX_GPIO, a02b_cfg.baudrate);
 
-    /* ---- BU UWB (UART1, GPIO6/7) -------------------------------*/
+    /* ---- BU UWB (UART1, GPIO18/37) ------------------------------*/
     bu_uwb_config_t bu_cfg = bu_uwb_default_config((uart_port_t)BU_UWB_UART_PORT, BU_UWB_RX_GPIO, BU_UWB_TX_GPIO);
     bu_cfg.baudrate = BU_UWB_BAUDRATE;
     print_status("bu_uwb", bu_uwb_init(&bu_cfg));
@@ -362,7 +366,7 @@ void app_main(void)
     fsr_cfg.adc_channel = (adc_channel_t)FSR_ADC_CHANNEL;
     print_status("fsr_adc", fsr_adc_init(&fsr_cfg));
 
-    /* ---- RPLIDAR C1 (UART2, GPIO17/18) -------------------------*/
+    /* ---- RPLIDAR C1 (UART2, GPIO17/9) ---------------------------*/
     rplidar_c1_config_t lidar_cfg = rplidar_c1_default_config((uart_port_t)RPLIDAR_UART_PORT, RPLIDAR_RX_GPIO, RPLIDAR_TX_GPIO);
     lidar_cfg.baudrate = RPLIDAR_BAUDRATE;
     esp_err_t lidar_ret = rplidar_c1_init(&g_lidar, &lidar_cfg);

@@ -62,6 +62,13 @@ static const char *TAG = "follow_only_dbg";
 #define FR_ENABLE_FLASH_LOG      1
 #define FR_ENABLE_LIVE_STATUS    1
 
+/* Set to 1 for bench debugging: motion is auto-armed as soon as the phone
+ * connects and the first heartbeat arrives.  This lets you test motor movement
+ * without pressing the CLEAR/ARM button every time after a reboot/OTA.
+ * WARNING: motors will move as soon as a valid UWB target appears.
+ * Keep at 0 for normal field operation. */
+#define FR_STARTUP_AUTO_ARM      0
+
 /* Set to 1 only when you want an extra hard cap during early bench testing.
  * Normal field testing should keep this at 0 so speed follows Kconfig limits:
  *   CONFIG_FOLLOW_ONLY_MAX_LINEAR_MMPS
@@ -110,7 +117,7 @@ static const char *TAG = "follow_only_dbg";
 #define FR_LOG_PATH                  "/spiffs/follow_log.csv"
 #define FR_LOG_QUEUE_LEN             96
 #define FR_LOG_HZ                    5
-#define FR_LIVE_JSON_BUF_SIZE        8192
+#define FR_LIVE_JSON_BUF_SIZE        4096  /* actual JSON ~1.3 KiB; 4 KiB with margin */
 
 /* Startup gate. */
 #define FR_STARTUP_LOG_INTERVAL_MS   1000
@@ -542,7 +549,6 @@ static void flash_log_task(void *arg)
     (void)arg;
     FILE *f = flash_log_open_append();
     telemetry_record_t rec;
-    int flush_div = 0;
 
     while (1) {
         if (s_clear_log_requested) {
@@ -623,10 +629,10 @@ static void flash_log_task(void *arg)
                 rec.meas_w_rps,
                 (unsigned long)rec.log_dropped);
 
-        if (++flush_div >= FR_LOG_HZ) {
-            flush_div = 0;
-            fflush(f);
-        }
+        /* Flush every write so that HTTP /log downloads see up-to-date data
+         * (at most one line may still be in the stream buffer).
+         * The queue-receive timeout path below also flushes on idle periods. */
+        fflush(f);
     }
 }
 
@@ -808,9 +814,14 @@ static void uwb_task(void *arg)
 {
     (void)arg;
     char line[BU_UWB_LINE_MAX];
+    int cons_parse_errors = 0;
 
     while (1) {
         if (bu_uwb_read_line(line, sizeof(line), 200) != ESP_OK) {
+            /* read_line normally blocks up to the timeout and yields the CPU.
+             * If it returns immediately with a hard UART error (framing / overflow),
+             * give the scheduler a tick so other tasks don't starve. */
+            vTaskDelay(1);
             continue;
         }
 
@@ -818,11 +829,27 @@ static void uwb_task(void *arg)
         bu_uwb_distance_t dist = {0};
 
         if (bu_uwb_parse_twr_line(line, &twr) && twr.valid) {
+            cons_parse_errors = 0;
             uwb_publish_twr(twr.x_cm, twr.y_cm, twr.distance_cm);
         } else if (bu_uwb_parse_distance_line(line, &dist) && dist.valid) {
+            cons_parse_errors = 0;
             uwb_publish_range_only(dist.distance_m);
         } else {
             uwb_publish_parse_error();
+            /* When the UWB module floods the UART with unparseable data
+             * (e.g. tag out of range, electrical noise), bu_uwb_read_line
+             * returns immediately for every garbage "line" that contains a
+             * newline byte.  Without a yield here, this task (prio 6) burns
+             * 100 % CPU and starves the HTTP server (prio 5) — the web page
+             * freezes and /live stops updating.
+             *
+             * Yield for one tick after every 10 consecutive parse errors so
+             * the lower-priority tasks get a chance to run.  Valid TWR/distance
+             * frames reset the counter, so normal operation is unaffected. */
+            if (++cons_parse_errors >= 10) {
+                cons_parse_errors = 0;
+                vTaskDelay(1);
+            }
         }
     }
 }
@@ -886,19 +913,23 @@ static const char s_index_html[] =
 "'applied v='+f(c.applied_v_mps,2)+' m/s, w='+f(c.applied_w_rps,2)+' rad/s, armed='+r.motion_armed+', motion_allowed='+r.motion_allowed+'<br>' +"
 "'direct pulse: L='+f(c.direct_left_mps,2)+' m/s '+c.direct_left_us+' us, R='+f(c.direct_right_mps,2)+' m/s '+c.direct_right_us+' us, ret pulse='+c.chassis_pulse_ret;"
 "}"
-"async function post(p){try{let r=await fetch(p,{method:'POST',cache:'no-store'});if(!r.ok)throw new Error(r.status);return true;}catch(e){document.getElementById('errmsg').textContent='CMD FAIL: '+p+' ('+e+')';return false;}}"
+"function ft(u,o,m){let c=new AbortController(),t=setTimeout(function(){c.abort()},m);return fetch(u,Object.assign({},o,{signal:c.signal})).finally(function(){clearTimeout(t)});}"
+"async function post(p){try{let r=await ft(p,{method:'POST',cache:'no-store'},3000);if(!r.ok)throw new Error(r.status);return true;}catch(e){document.getElementById('errmsg').textContent='CMD FAIL: '+p+' ('+e.message+')';return false;}}"
 "async function estop(){if(await post('/estop'))await poll();}"
 "async function arm(){if(await post('/clear'))await poll();}"
 "async function motionOff(){if(await post('/motion_off'))await poll();}"
 "async function clearLog(){if(await post('/clear_log'))await poll();}"
-"async function hb(){await post('/hb');}"
-"var _pollCtrl=null;"
+"async function hb(){ft('/hb',{method:'POST',cache:'no-store'},2000).catch(function(){});}"
+"var _pollCtrl=null,_pollTimer=null;"
 "async function poll(){"
-"if(_pollCtrl)_pollCtrl.abort();_pollCtrl=new AbortController();"
-"try{let r=await fetch('/live',{cache:'no-store',signal:_pollCtrl.signal});if(!r.ok)throw new Error('HTTP '+r.status);"
+"if(_pollCtrl)_pollCtrl.abort();if(_pollTimer)clearTimeout(_pollTimer);"
+"_pollCtrl=new AbortController();"
+"_pollTimer=setTimeout(function(){_pollCtrl.abort()},5000);"
+"try{let r=await fetch('/live',{cache:'no-store',signal:_pollCtrl.signal});clearTimeout(_pollTimer);"
+"if(!r.ok)throw new Error('HTTP '+r.status);"
 "let txt=await r.text();let j=JSON.parse(txt);render(j);document.getElementById('live').textContent=JSON.stringify(j,null,2);"
-"}catch(e){if(e.name!=='AbortError'){document.getElementById('summary').textContent='Live connection problem';document.getElementById('live').textContent='connection lost: '+e;}}}"
-"setInterval(hb,300);setInterval(poll,300);hb();poll();"
+"}catch(e){clearTimeout(_pollTimer);if(e.name!=='AbortError'){document.getElementById('summary').textContent='Live connection problem';document.getElementById('live').textContent='connection lost: '+e;}}}"
+"setInterval(hb,500);setInterval(poll,500);hb();poll();"
 "</script></body></html>";
 
 static esp_err_t index_handler(httpd_req_t *req)
@@ -914,8 +945,13 @@ static esp_err_t heartbeat_handler(httpd_req_t *req)
 
 static esp_err_t estop_handler(httpd_req_t *req)
 {
-    s_estop_pending = true;           /* immediate flag — control_task sees it next cycle */
-    remote_estop(now_us());           /* also latch in the full state struct */
+    /* Order matters: remote_estop() MUST run before setting s_estop_pending.
+     * If control_task (prio 7) preempts between these two lines and sees the
+     * flag before the state update, it would do the fast-path stop but then
+     * on the very next cycle see estop_latched==false / motion_armed==true
+     * and re-arm motion for one cycle (~20 ms of unintended movement). */
+    remote_estop(now_us());           /* 1. latch estop_latched=true, motion_armed=false */
+    s_estop_pending = true;           /* 2. fast-path flag — control_task sees it next cycle */
     ESP_LOGW(TAG, "REMOTE E-STOP latched");
     return http_send_text(req, "ESTOP\n", "text/plain");
 }
@@ -940,8 +976,6 @@ static esp_err_t clear_log_handler(httpd_req_t *req)
     return http_send_text(req, "CLEAR_LOG_REQUESTED\n", "text/plain");
 }
 
-static char s_live_json_buf[FR_LIVE_JSON_BUF_SIZE];
-
 static esp_err_t live_handler(httpd_req_t *req)
 {
     const uint64_t t = now_us();
@@ -958,9 +992,13 @@ static esp_err_t live_handler(httpd_req_t *req)
         hb_age_ms = (uint32_t)((t - r.last_heartbeat_us) / 1000ULL);
     }
 
-    char *buf = s_live_json_buf;
+    /* Stack-allocated buffer avoids the race where two concurrent requests
+     * (e.g. /live and /status, which both map to this handler) share a single
+     * global buffer.  HTTP server task stack is 12 KiB; 4 KiB buffer leaves
+     * ~7-8 KiB headroom for the rest of the handler call chain. */
+    char buf[FR_LIVE_JSON_BUF_SIZE];
 
-    int n = snprintf(buf, FR_LIVE_JSON_BUF_SIZE,
+    int n = snprintf(buf, sizeof(buf),
              "{"
              "\"remote\":{"
              "\"client_connected\":%s,\"estop_latched\":%s,\"motion_armed\":%s,"
@@ -1063,7 +1101,7 @@ static esp_err_t live_handler(httpd_req_t *req)
              (unsigned long)s_log_dropped,
              FR_LOG_PATH);
 
-    if (n < 0 || n >= FR_LIVE_JSON_BUF_SIZE) {
+    if (n < 0 || n >= (int)sizeof(buf)) {
         return http_send_text(req, "{\"error\":\"live_json_truncated\"}\n", "application/json");
     }
 
@@ -1333,10 +1371,11 @@ static void control_task(void *arg)
 
             float err = tgt_dist - follow_distance_m;
             if (err > 0.0f) {
+                /* Too far: proportional forward speed. */
                 algo_v = kp_dist * err;
-            } else if (-err <= stop_band_m) {
-                algo_v = 0.0f;
             } else {
+                /* Within or closer than follow distance: hold position.
+                 * The suitcase never reverses autonomously. */
                 algo_v = 0.0f;
             }
             algo_v = clampf(algo_v, 0.0f, max_linear_mps);
@@ -1621,9 +1660,16 @@ void app_main(void)
 
     imu_bringup();
 
-    /* 3. 默认 motion_armed=false / estop_latched=true；CLEAR / ARM 后保持 true，STOP 后 false。 */
+    /* 3. 默认 motion_armed=false / estop_latched=true；CLEAR / ARM 后保持 true，STOP 后 false。
+     * 调试时可设 FR_STARTUP_AUTO_ARM=1 跳过手动解锁步骤，但正常使用时务必保持为 0。 */
+#if FR_STARTUP_AUTO_ARM
+    remote_clear_and_arm(now_us());
+    ESP_LOGW(TAG, "STARTUP AUTO-ARM: motion armed automatically (FR_STARTUP_AUTO_ARM=1)");
+#else
     remote_motion_off(now_us());
     remote_estop(now_us());
+    ESP_LOGI(TAG, "motion locked; press CLEAR/ARM on web page to enable motors");
+#endif
 
     xTaskCreate(control_task, "control", 6144, &s_chassis, 7, NULL);
     ESP_LOGI(TAG,

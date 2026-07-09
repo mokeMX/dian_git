@@ -195,8 +195,7 @@ config FOLLOW_ROBOT_IMU_ENABLE
     default y
 config FOLLOW_ROBOT_HEADING_HOLD
     bool "Close the heading loop with the IMU (feed-forward omega + yaw error)"
-    default y
-    depends on FOLLOW_ROBOT_IMU_ENABLE
+    default n
     help
         The follow_avoid algorithm outputs a desired yaw rate; this loop
         integrates it into a reference heading and trims the command with the
@@ -205,26 +204,103 @@ config FOLLOW_ROBOT_HEADING_HOLD
 config FOLLOW_ROBOT_HEADING_KP_MILLI
     int "Heading-hold KP (milli, rad/s per rad of error)"
     default 1500
-    depends on FOLLOW_ROBOT_HEADING_HOLD
 config FOLLOW_ROBOT_IMU_YAW_INVERT
     bool "Invert IMU yaw sign (if +yaw is not CCW for your mounting)"
     default n
-    depends on FOLLOW_ROBOT_IMU_ENABLE
+
 config FOLLOW_ROBOT_I2C_SDA_GPIO
     int "IMU I2C SDA GPIO"
     default 39
-    depends on FOLLOW_ROBOT_IMU_ENABLE
+
 config FOLLOW_ROBOT_I2C_SCL_GPIO
     int "IMU I2C SCL GPIO"
     default 38
-    depends on FOLLOW_ROBOT_IMU_ENABLE
+
 config FOLLOW_ROBOT_IMU_ADDR
     hex "IMU 7-bit I2C address"
     default 0x23
-    depends on FOLLOW_ROBOT_IMU_ENABLE
+
 
 config FOLLOW_ROBOT_CONTROL_HZ
     int "Control loop frequency (Hz)"
     default 50
+
+comment "--- WiFi Remote Control (网页遥控) ---"
+
+config FOLLOW_ROBOT_WIFI_ENABLE
+    bool "Enable WiFi SoftAP + HTTP remote control"
+    default y
+    help
+        Starts a WiFi SoftAP hotspot with an embedded web page for remote
+        monitoring, E-STOP, CLEAR/ARM, and real-time telemetry.
+
+config FOLLOW_ROBOT_WIFI_AP_SSID
+    string "WiFi AP SSID"
+    default "FollowRobot"
+    depends on FOLLOW_ROBOT_WIFI_ENABLE
+
+config FOLLOW_ROBOT_WIFI_AP_PASS
+    string "WiFi AP password (≥8 chars for WPA2, empty = open)"
+    default "12345678"
+    depends on FOLLOW_ROBOT_WIFI_ENABLE
+
+config FOLLOW_ROBOT_WIFI_AP_CHANNEL
+    int "WiFi AP channel"
+    default 6
+    depends on FOLLOW_ROBOT_WIFI_ENABLE
+
+config FOLLOW_ROBOT_WIFI_HEARTBEAT_TIMEOUT_MS
+    int "Heartbeat timeout (ms) before forced E-STOP"
+    default 1500
+    depends on FOLLOW_ROBOT_WIFI_ENABLE
+
+config FOLLOW_ROBOT_WIFI_REQUIRE_CLIENT
+    bool "Require phone client + heartbeat before robot bring-up"
+    default n
+    depends on FOLLOW_ROBOT_WIFI_ENABLE
+    help
+        OFF: robot boots immediately, web page can connect anytime.
+        ON: blocks app_main until a phone connects and sends heartbeat.
+
+config FOLLOW_ROBOT_AUTO_ARM
+    bool "Auto-arm motion on boot (DANGER: bench debug only)"
+    default n
+    depends on FOLLOW_ROBOT_WIFI_ENABLE
+    help
+        WARNING: motors will move as soon as a valid UWB target appears.
+        Keep disabled for normal field operation.
+
+comment "--- Flash CSV Logging (SPIFFS) ---"
+
+config FOLLOW_ROBOT_FLASH_LOG_ENABLE
+    bool "Enable SPIFFS flash CSV logging"
+    default n
+    help
+        Requires a 'logs' SPIFFS partition in partitions.csv.
+        Logs telemetry at FOLLOW_ROBOT_FLASH_LOG_HZ rate.
+
+config FOLLOW_ROBOT_FLASH_LOG_HZ
+    int "Flash log rate (Hz)"
+    default 5
+    depends on FOLLOW_ROBOT_FLASH_LOG_ENABLE
+
+comment "--- UWB EMA Smoothing (网页遥控配套增强) ---"
+
+config FOLLOW_ROBOT_UWB_SMOOTH_TAU_MS
+    int "UWB EMA smoothing time constant (ms)"
+    default 350
+    help
+        Larger = smoother but more lag. 350ms is a good default for human walking.
+
+config FOLLOW_ROBOT_UWB_JUMP_MARGIN_MM
+    int "UWB outlier jump margin (mm)"
+    default 300
+    help
+        If a new TWR reading jumps more than this from the filtered position,
+        it is rejected as an outlier (up to consecutive limit).
+
+config FOLLOW_ROBOT_UWB_OUTLIER_LIMIT
+    int "Consecutive outliers before filter reinit"
+    default 5
 
 endmenu

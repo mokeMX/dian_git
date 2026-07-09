@@ -7,3 +7,24 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 # Floating point is used heavily in the control loop; keep newlib nano off so
 # printf("%f") works in logs.
 CONFIG_NEWLIB_NANO_FORMAT=n
+
+# WiFi Remote Control defaults
+CONFIG_FOLLOW_ROBOT_WIFI_ENABLE=y
+CONFIG_FOLLOW_ROBOT_WIFI_AP_SSID="FollowRobot"
+CONFIG_FOLLOW_ROBOT_WIFI_AP_PASS="12345678"
+CONFIG_FOLLOW_ROBOT_WIFI_REQUIRE_CLIENT=n
+CONFIG_FOLLOW_ROBOT_AUTO_ARM=n
+
+# ESP-IDF WiFi SoftAP — must be enabled for follow_robot remote control
+CONFIG_ESP_WIFI_ENABLED=y
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+# Increase WiFi task stack for HTTP server stability
+CONFIG_ESP_WIFI_TASK_STACK_SIZE=4096
+
+# Flash CSV Logging (disabled by default)
+CONFIG_FOLLOW_ROBOT_FLASH_LOG_ENABLE=n
+
+# UWB EMA smoothing defaults
+CONFIG_FOLLOW_ROBOT_UWB_SMOOTH_TAU_MS=350
+CONFIG_FOLLOW_ROBOT_UWB_JUMP_MARGIN_MM=300
+CONFIG_FOLLOW_ROBOT_UWB_OUTLIER_LIMIT=5

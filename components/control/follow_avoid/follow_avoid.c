@@ -384,8 +384,16 @@ fa_output_t fa_update(fa_ctx_t *ctx, const fa_target_t *target,
                 choose_heading(field, cfg, blocked, goal, ctx->prev_heading,
                                &h)) {
                 heading = h;
+            } else if (goal_idx < 0) {
+                /* Target is outside the lidar FOV but no free sector exists
+                 * within the FOV. Steer toward the nearest FOV edge in the
+                 * goal's direction — turning toward the target will bring
+                 * it into view, and the FOV edge keeps the turn bounded. */
+                const float half_fov = 0.5f * field->fov_rad;
+                heading = (goal > 0.0f) ? half_fov : -half_fov;
             } else {
-                /* Fully boxed in: treat as emergency-ish, stop & turn. */
+                /* Fully boxed in: goal is ahead but every sector is blocked.
+                 * Emergency stop and rotate toward the less obstructed side. */
                 ctx->state = FA_STATE_ESTOP;
                 ctx->cmd_v =
                     ramp(ctx->cmd_v, 0.0f, cfg->max_lin_decel_mps2, dt_s);

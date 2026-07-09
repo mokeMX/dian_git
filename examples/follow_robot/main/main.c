@@ -3,8 +3,8 @@
  *
  * Wiring of the sensing/acting stack:
  *   UWB (BU0x)      -> follow target  (range + bearing to the user's tag)
- *   RPLIDAR C1      -> obstacle field (front 180 deg polar histogram)
- *   2x A02YYUW      -> front-corner near-field safety (ultrasonic)
+ *   RPLIDAR C1      -> obstacle field (front ±65° via 0-65° & 295-360° raw)
+ *   2x A02YYUW      -> side cones [60-120°] & [-120° to -60°] injected into field
  *   IMU             -> heading closed-loop (yaw error trims the turn command)
  *   chassis         -> rear diff-drive: APO-DL ESC (RC PWM) + AB encoder PID
  *
@@ -39,8 +39,10 @@
 #include "chassis.h"
 #include "follow_avoid.h"
 
+/*
 #include "driver/i2c_master.h"
 #include "imu_i2c.h"
+*/
 
 static const char *TAG = "follow_robot";
 
@@ -56,8 +58,27 @@ static const char *TAG = "follow_robot";
 #define FR_IMU_YAW_SIGN -1.0f
 #define CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI 0
 
-#define LIDAR_SECTORS 36                 /* 5 deg per sector over 180 deg FOV */
-#define LIDAR_FOV_RAD ((float)M_PI)
+/* FOV covers lidar ±65° + left US 60-120° + right US 240-300° = 240° total.
+ * 48 sectors × 5°/sector = 240°.  All body-frame angles, centred on forward. */
+#define LIDAR_SECTORS 48
+#define LIDAR_FOV_RAD (240.0f * (float)M_PI / 180.0f)
+
+/* Lidar raw-angle filter: only accept points within these two windows.
+ * With FORWARD_DEG=0, body-frame coverage is [-65°, +65°] around forward. */
+#define LIDAR_ANGLE_LO1   0.0f
+#define LIDAR_ANGLE_HI1  65.0f
+#define LIDAR_ANGLE_LO2 295.0f
+#define LIDAR_ANGLE_HI2 360.0f
+
+/* Ultrasonic cone angles in the body frame (sensor mounting geometry).
+ * Left  sensor: 60° cone spanning [ 60°,  120°] (left / CCW side)
+ * Right sensor: 60° cone spanning [-120°, -60°] (right / CW side)
+ * NOTE: angles must be in [-half_fov, +half_fov] = [-120°, +120°] to match
+ * the sector angle range computed by inject_ultrasonic(). */
+#define ULTRA_LEFT_CONE_LO_DEG    60.0f
+#define ULTRA_LEFT_CONE_HI_DEG   120.0f
+#define ULTRA_RIGHT_CONE_LO_DEG -120.0f
+#define ULTRA_RIGHT_CONE_HI_DEG  -60.0f
 
 /* Freshness windows: data older than this is treated as missing. */
 #define TARGET_FRESH_US 700000ULL        /* 0.7 s */
@@ -78,7 +99,7 @@ typedef struct {
     fa_obstacle_field_t field;
     uint64_t field_ts_us;
 
-    /* Ultrasonics (front corners) */
+    /* Ultrasonics (side-looking, cone injected into field by control task) */
     float ul_m;
     uint64_t ul_ts_us;
     float ur_m;
@@ -168,8 +189,14 @@ static void lidar_task(void *arg)
             fa_obstacle_reset(&work, LIDAR_SECTORS, LIDAR_FOV_RAD);
         }
         if (p.distance_mm > 0.0f && p.quality > 0) {
-            const float body = lidar_angle_to_body_rad(p.angle_deg);
-            fa_obstacle_add(&work, body, p.distance_mm / 1000.0f);
+            /* 只保留前后两个有效角度窗口内的数据 */
+            const float ang = p.angle_deg;
+            const bool in_front = (ang >= LIDAR_ANGLE_LO1 && ang <= LIDAR_ANGLE_HI1);
+            const bool in_left  = (ang >= LIDAR_ANGLE_LO2 && ang <= LIDAR_ANGLE_HI2);
+            if (in_front || in_left) {
+                const float body = lidar_angle_to_body_rad(ang);
+                fa_obstacle_add(&work, body, p.distance_mm / 1000.0f);
+            }
         }
     }
 }
@@ -203,11 +230,10 @@ static void ultra_task(void *arg)
 }
 
 /* ----------------------------------------------------- IMU (heading loop) */
+/*
 static imu_i2c_t s_imu;
 static bool s_imu_ok = false;
 
-/* Read the IMU yaw (rad, CCW-positive after sign fix). Returns false if no
- * trustworthy reading is available this cycle. */
 static bool imu_read_yaw(float *yaw_rad)
 {
     if (!s_imu_ok) {
@@ -220,6 +246,37 @@ static bool imu_read_yaw(float *yaw_rad)
     }
     *yaw_rad = FR_IMU_YAW_SIGN * DEG2RAD(r.euler_deg[2]);
     return true;
+}
+*/
+
+/* ----------------------------------------------------- Sensor fusion helpers */
+
+/*
+ * Inject an ultrasonic cone reading into the obstacle field.
+ * Since the sensor cannot resolve angle within its ~60° cone, we conservatively
+ * mark every sector whose centre lies inside [cone_lo_deg, cone_hi_deg] with
+ * the measured distance (keeping the closer value if lidar already wrote one).
+ * All angles are body-frame degrees; dist_m <= 0 is silently ignored.
+ */
+static void inject_ultrasonic(fa_obstacle_field_t *f,
+                               float cone_lo_deg, float cone_hi_deg,
+                               float dist_m)
+{
+    if (f == NULL || dist_m <= 0.0f) {
+        return;
+    }
+    const float lo = DEG2RAD(cone_lo_deg);
+    const float hi = DEG2RAD(cone_hi_deg);
+    const float half = 0.5f * f->fov_rad;
+
+    for (int i = 0; i < f->num_sectors; i++) {
+        const float a = -half + ((float)i + 0.5f) * f->sector_width_rad;
+        if (a >= lo && a <= hi) {
+            if (dist_m < f->min_dist_m[i]) {
+                f->min_dist_m[i] = dist_m;
+            }
+        }
+    }
 }
 
 /* ----------------------------------------------------- Control loop */
@@ -286,11 +343,15 @@ static void control_task(void *arg)
     fa_ctx_t fa;
     fa_init(&fa, NULL);
     fa.cfg = build_fa_config();
+    /*
     const float max_omega = fa.cfg.max_angular_rps;
+    */
+    /*
     const float heading_kp = CONFIG_FOLLOW_ROBOT_HEADING_KP_MILLI / 1000.0f;
     const bool heading_hold = FR_HEADING_HOLD;
-    float yaw_ref = 0.0f;       /* IMU heading reference (rad) */
+    float yaw_ref = 0.0f;
     bool yaw_ref_set = false;
+    */
 
     const TickType_t period = pdMS_TO_TICKS(1000 / CONFIG_FOLLOW_ROBOT_CONTROL_HZ);
     TickType_t last_wake = xTaskGetTickCount();
@@ -324,16 +385,37 @@ static void control_task(void *arg)
         ur.dist_m = g_shared.ur_m;
         unlock();
 
+        /* Fuse ultrasonic cone readings into the obstacle field so the VFH
+         * planner can see side-obstacles, not just the lidar's front cone.
+         * After injection, nullify raw ul/ur so fa_update() doesn't treat
+         * side-looking sensors as front-clearance contributors (false ESTOP).
+         * When lidar is dead (no field), raw values stay valid as fallback. */
+        if (have_field) {
+            if (ul.valid) {
+                inject_ultrasonic(&field,
+                                  ULTRA_LEFT_CONE_LO_DEG, ULTRA_LEFT_CONE_HI_DEG,
+                                  ul.dist_m);
+                ul.valid = false;
+            }
+            if (ur.valid) {
+                inject_ultrasonic(&field,
+                                  ULTRA_RIGHT_CONE_LO_DEG, ULTRA_RIGHT_CONE_HI_DEG,
+                                  ur.dist_m);
+                ur.valid = false;
+            }
+        }
+
         fa_output_t out = fa_update(&fa, &target,
                                     have_field ? &field : NULL, &ul, &ur, dt);
 
-        /* --- IMU heading closed-loop ------------------------------------
+        /* --- IMU heading closed-loop (COMMENTED OUT) ----------------------
          * The algorithm's omega is a feed-forward intent. We integrate it into
          * a reference heading and trim the command by the IMU yaw error, so the
          * suitcase actually achieves the turn / holds a straight line despite
          * caster scrub. Only active while genuinely tracking the user
          * (FOLLOW/AVOID); during SEARCH/ESTOP the robot must rotate freely. */
         float omega_cmd = out.omega_rps;
+        /*
         const bool tracking =
             (out.state == FA_STATE_FOLLOW || out.state == FA_STATE_AVOID);
         float yaw_meas;
@@ -351,8 +433,9 @@ static void control_task(void *arg)
                 omega_cmd = -max_omega;
             }
         } else {
-            yaw_ref_set = false; /* re-seed the reference next time we re-acquire */
+            yaw_ref_set = false;
         }
+        */
 
         chassis_set_velocity(chassis, out.v_mps, omega_cmd);
         chassis_update(chassis, dt);
@@ -391,6 +474,10 @@ void app_main(void)
     memset(&g_shared, 0, sizeof(g_shared));
     // 创建一个互斥锁(Mutex)，用于保护 g_shared，防止多任务并发读写时出现数据竞态(Data Race)
     g_shared.lock = xSemaphoreCreateMutex();
+    if (g_shared.lock == NULL) {
+        ESP_LOGE(TAG, "FATAL: mutex create failed");
+        return;
+    }
     // 初始化避障势场/障碍物地图，传入雷达的扇区数量和视场角(FOV)
     fa_obstacle_reset(&g_shared.field, LIDAR_SECTORS, LIDAR_FOV_RAD);
 
@@ -478,37 +565,34 @@ void app_main(void)
         ESP_LOGE(TAG, "ultrasonic R init FAILED");
     }
 
-    /* --- 6. IMU (惯性测量单元) 初始化 --- */
-    // IMU提供航向角(Heading)反馈，防止行李箱在跟随或避障时走偏。
-    // 如果初始化失败属于“非致命错误”，控制循环将退化为开环角速度控制（open omega command）。
-    
+    /* --- 6. IMU (惯性测量单元) 初始化 (COMMENTED OUT) --- */
+    /*
     static i2c_master_bus_handle_t i2c_bus;
-    // 配置I2C主机总线参数
     i2c_master_bus_config_t i2c_cfg = {
         .i2c_port = 0,
         .sda_io_num = CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO,
         .scl_io_num = CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO,
         .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,                 // 硬件滤波抗干扰
-        .flags.enable_internal_pullup = true,   // 启用内部上拉电阻
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
     };
-    
+
     if (i2c_new_master_bus(&i2c_cfg, &i2c_bus) == ESP_OK) {
         imu_i2c_config_t imucfg = imu_i2c_default_config();
         imucfg.sda_gpio = CONFIG_FOLLOW_ROBOT_I2C_SDA_GPIO;
         imucfg.scl_gpio = CONFIG_FOLLOW_ROBOT_I2C_SCL_GPIO;
         imucfg.device_address = CONFIG_FOLLOW_ROBOT_IMU_ADDR;
         imucfg.external_bus = i2c_bus;
-        
+
         if (imu_i2c_init(&s_imu, &imucfg) == ESP_OK) {
-            s_imu_ok = true; // 标记IMU就绪
-            // 打印航向闭环(Heading Hold)是否在宏定义中被开启
-            ESP_LOGI(TAG, "imu ready (heading loop %s)",
-                     FR_HEADING_HOLD ? "ON" : "off");
+            s_imu_ok = true;
+            ESP_LOGI(TAG, “imu ready (heading loop %s)”,
+                     FR_HEADING_HOLD ? “ON” : “off”);
         } else {
-            ESP_LOGE(TAG, "imu init FAILED - heading loop disabled");
+            ESP_LOGE(TAG, “imu init FAILED - heading loop disabled”);
         }
     }
+    */
 
     /* --- 7. 核心控制循环启动 --- */
     // 当所有传感器任务就绪并开始往共享内存(g_shared)填充数据后，启动控制大脑。

@@ -14,7 +14,7 @@ gcc \
   -I"$repo_root/components/control/chassis" \
   "$repo_root/tests/algorithm/test_follow_avoid.c" \
   "$repo_root/components/control/follow_avoid/follow_avoid.c" \
-  "$repo_root/components/control/chassis/chassis.c" \
+  "$repo_root/components/control/chassis/chassis_math.c" \
   -lm \
   -o "$build_dir/test_follow_avoid"
 

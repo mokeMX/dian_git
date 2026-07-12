@@ -14,9 +14,9 @@ gcc \
   -I"$repo_root/components/sensors/bu_uwb" \
   -I"$repo_root/components/sensors/fsr_adc" \
   "$repo_root/tests/protocol/test_sensor_parsers.c" \
-  "$repo_root/components/sensors/a02yyuw/a02yyuw.c" \
-  "$repo_root/components/sensors/bu_uwb/bu_uwb.c" \
-  "$repo_root/components/sensors/fsr_adc/fsr_adc.c" \
+  "$repo_root/components/sensors/a02yyuw/a02yyuw_parser.c" \
+  "$repo_root/components/sensors/bu_uwb/bu_uwb_parser.c" \
+  "$repo_root/components/sensors/fsr_adc/fsr_math.c" \
   -lm \
   -o "$build_dir/test_sensor_parsers"
 

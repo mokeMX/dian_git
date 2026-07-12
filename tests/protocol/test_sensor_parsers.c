@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "a02yyuw.h"
-#include "bu_uwb.h"
-#include "fsr_adc.h"
+#include "a02yyuw_parser.h"
+#include "bu_uwb_parser.h"
+#include "fsr_math.h"
 
 static void test_a02yyuw_valid_frame(void)
 {

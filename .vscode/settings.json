@@ -3,9 +3,11 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
-    "--compile-commands-dir=d:\\ESP32_S3\\DIAN_TEST\\dian_git\\build"
+    "--compile-commands-dir=${workspaceFolder}\\build"
   ],
   "idf.flashType": "UART",
   "idf.portWin": "COM35",
-  "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/"
+  "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/",
+  "idf.adapterTargetName": "esp32s3",
+  "idf.buildPathWin": "${workspaceFolder}\\build"
 }

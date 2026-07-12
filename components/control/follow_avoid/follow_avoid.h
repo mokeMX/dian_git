@@ -26,7 +26,8 @@
  *   - 2x ultrasonic at the front-left / front-right corners -> near-field
  *     safety, catches thin/low obstacles in the lidar blind spots.
  *   - UWB tag carried by the user -> follow target (range + bearing).
- *   - IMU yaw is available to the app for heading hold; not required here.
+ *   - No absolute orientation sensor is used. UWB bearing supplies the desired
+ *     turn, while wheel encoders close the two speed loops.
  * ---------------------------------------------------------------------------
  */
 

@@ -36,6 +36,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "chassis_math.h"
 
 /* ===================================================================== PID */
 /*
@@ -45,21 +46,6 @@
  * on the measurement to avoid set-point kicks, and the integrator is clamped
  * against the same output limits (anti-windup).
  */
-typedef struct {
-    float kp;          /* us per (m/s) */
-    float ki;          /* us per (m/s . s) */
-    float kd;          /* us per (m/s / s) */
-    float out_min;     /* clamp on the PID contribution (us) */
-    float out_max;
-    /* state */
-    float i_term;
-    float prev_meas;
-    bool has_prev;
-} chassis_pid_t;
-
-void chassis_pid_reset(chassis_pid_t *pid);
-float chassis_pid_step(chassis_pid_t *pid, float setpoint, float measured,
-                       float dt);
 
 /* ============================================================== encoder */
 typedef struct {
@@ -112,6 +98,9 @@ typedef struct {
     /* ---- safety ---- */
     float slew_us_per_s;       /* max ESC pulse change rate (0 disables) */
     float failsafe_timeout_s;  /* no fresh setpoint this long -> neutral */
+    float encoder_stall_timeout_s;
+    float encoder_min_command_mps;
+    float encoder_min_feedback_mps;
 } chassis_config_t;
 
 /* ============================================================== state */
@@ -136,6 +125,9 @@ typedef struct {
     float cmd_pulse_l_us;      /* last applied ESC pulse (for slew) */
     float cmd_pulse_r_us;
     float since_setpoint_s;    /* fail-safe watchdog */
+    float left_stall_s;
+    float right_stall_s;
+    bool encoder_fault_latched;
 
     /* dead-reckoning odometry (from encoders) */
     double odo_x_m;
@@ -184,6 +176,10 @@ void chassis_get_odometry(chassis_t *ch, float *x_m, float *y_m, float *yaw_rad)
 /* Coast to neutral (ESC 1500 us) and reset the speed set-points + integrators. */
 void chassis_stop(chassis_t *ch);
 
+/* Highest-priority safe output: immediately writes neutral and resets control. */
+esp_err_t chassis_emergency_stop(chassis_t *ch);
+bool chassis_encoder_faulted(const chassis_t *ch);
+
 /* Same as stop for an RC ESC (no separate electrical brake line). Kept for API
  * compatibility; also clears the PID integrators. */
 void chassis_brake(chassis_t *ch);
@@ -198,6 +194,3 @@ void chassis_brake(chassis_t *ch);
  * preserved instead of clipped. (算法2 multiplies the result by max_speed to get
  * the m/s set-points, but the normalised form keeps the tests unchanged.)
  */
-void chassis_diff_drive_mix(float v_mps, float omega_rps, float track_width_m,
-                            float max_speed_mps, float *left_duty,
-                            float *right_duty);

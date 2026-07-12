@@ -23,61 +23,6 @@ a02yyuw_config_t a02yyuw_default_config(uart_port_t uart_port,
     return config;
 }
 
-bool a02yyuw_parse_frame(const uint8_t *frame,
-                         size_t len,
-                         a02yyuw_reading_t *out)
-{
-    if (out != NULL) {
-        out->distance_mm = 0;
-        out->valid = false;
-    }
-    if (frame == NULL || out == NULL || len < 4 || frame[0] != 0xFF) {
-        return false;
-    }
-
-    const uint8_t checksum = (uint8_t)((frame[0] + frame[1] + frame[2]) & 0xFF);
-    if (checksum != frame[3]) {
-        return false;
-    }
-
-    const uint16_t distance = ((uint16_t)frame[1] << 8) | frame[2];
-    if (distance < A02YYUW_MIN_DISTANCE_MM ||
-        distance > A02YYUW_MAX_DISTANCE_MM) {
-        return false;
-    }
-
-    out->distance_mm = (int)distance;
-    out->valid = true;
-    return true;
-}
-
-bool a02yyuw_parse_latest(const uint8_t *buf,
-                          size_t len,
-                          a02yyuw_reading_t *out)
-{
-    bool found = false;
-    a02yyuw_reading_t last = {0};
-
-    if (buf == NULL || out == NULL || len < 4) {
-        if (out != NULL) {
-            out->distance_mm = 0;
-            out->valid = false;
-        }
-        return false;
-    }
-
-    for (size_t i = 0; i + 4 <= len; ++i) {
-        a02yyuw_reading_t current = {0};
-        if (a02yyuw_parse_frame(&buf[i], 4, &current)) {
-            last = current;
-            found = true;
-        }
-    }
-
-    *out = last;
-    return found;
-}
-
 esp_err_t a02yyuw_init_dev(a02yyuw_t *dev, const a02yyuw_config_t *config)
 {
     if (dev == NULL || config == NULL || config->rx_gpio < 0) {

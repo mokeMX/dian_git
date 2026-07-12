@@ -7,6 +7,7 @@
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "board_pin_config.h"
 
 /* ===================================================================== *
  * Pure section (compiled on BOTH the ESP target and the PC test build).  *
@@ -24,101 +25,32 @@ static float clampf(float x, float lo, float hi)
     return x;
 }
 
-void chassis_pid_reset(chassis_pid_t *pid)
-{
-    if (pid == NULL) {
-        return;
-    }
-    pid->i_term = 0.0f;
-    pid->prev_meas = 0.0f;
-    pid->has_prev = false;
-}
-
-float chassis_pid_step(chassis_pid_t *pid, float setpoint, float measured,
-                       float dt)
-{
-    if (pid == NULL) {
-        return 0.0f;
-    }
-    if (dt <= 0.0f) {
-        dt = 1e-3f;
-    }
-    const float err = setpoint - measured;
-
-    /* Integrate with anti-windup: the integrator alone is clamped to the same
-     * limits as the output, so it can never push the command past saturation. */
-    pid->i_term += pid->ki * err * dt;
-    pid->i_term = clampf(pid->i_term, pid->out_min, pid->out_max);
-
-    /* Derivative on measurement (not on error) avoids a spike when the
-     * set-point steps. */
-    float deriv = 0.0f;
-    if (pid->has_prev) {
-        deriv = (measured - pid->prev_meas) / dt;
-    }
-    pid->prev_meas = measured;
-    pid->has_prev = true;
-
-    float out = pid->kp * err + pid->i_term - pid->kd * deriv;
-    return clampf(out, pid->out_min, pid->out_max);
-}
-
-void chassis_diff_drive_mix(float v_mps, float omega_rps, float track_width_m,
-                            float max_speed_mps, float *left_duty,
-                            float *right_duty)
-{
-    float l = 0.0f;
-    float r = 0.0f;
-    if (max_speed_mps > 1e-6f) {
-        const float half = 0.5f * track_width_m;
-        l = (v_mps - omega_rps * half) / max_speed_mps;
-        r = (v_mps + omega_rps * half) / max_speed_mps;
-    }
-
-    /* If saturated, scale both wheels equally to preserve the turn ratio. */
-    float m = fabsf(l);
-    if (fabsf(r) > m) {
-        m = fabsf(r);
-    }
-    if (m > 1.0f) {
-        l /= m;
-        r /= m;
-    }
-
-    if (left_duty) {
-        *left_duty = clampf(l, -1.0f, 1.0f);
-    }
-    if (right_duty) {
-        *right_duty = clampf(r, -1.0f, 1.0f);
-    }
-}
-
 chassis_config_t chassis_default_config(void)
 {
     chassis_config_t cfg;
     memset(&cfg, 0, sizeof(cfg));
 
     /* ESC RC-PWM (matches the 动力轮代码 branch). */
-    cfg.esc_freq_hz = 50;
-    cfg.esc_period_us = 20000;
-    cfg.esc_min_us = 1000;
-    cfg.esc_mid_us = 1500;
-    cfg.esc_max_us = 2000;
-    cfg.pwm_resolution_bits = 14;
+    cfg.esc_freq_hz = ESC_PWM_FREQUENCY_HZ;
+    cfg.esc_period_us = ESC_PWM_PERIOD_US;
+    cfg.esc_min_us = ESC_PWM_MIN_US;
+    cfg.esc_mid_us = ESC_PWM_NEUTRAL_US;
+    cfg.esc_max_us = ESC_PWM_MAX_US;
+    cfg.pwm_resolution_bits = ESC_PWM_RESOLUTION_BITS;
     cfg.ledc_speed_mode = 0; /* LEDC_LOW_SPEED_MODE */
     cfg.ledc_timer = 0;      /* LEDC_TIMER_0 */
     cfg.left_ledc_channel = 0;
     cfg.right_ledc_channel = 1;
-    cfg.left_esc_gpio = 4;
-    cfg.right_esc_gpio = 5;
+    cfg.left_esc_gpio = PIN_ESC_LEFT_PWM;
+    cfg.right_esc_gpio = PIN_ESC_RIGHT_PWM;
     cfg.left_invert = false;
     cfg.right_invert = false;
 
     /* AB encoders (matches the 动力轮代码 branch). */
-    cfg.left_enc_a_gpio = 6;
-    cfg.left_enc_b_gpio = 7;
-    cfg.right_enc_a_gpio = 15;
-    cfg.right_enc_b_gpio = 16;
+    cfg.left_enc_a_gpio = PIN_ENCODER_LEFT_A;
+    cfg.left_enc_b_gpio = PIN_ENCODER_LEFT_B;
+    cfg.right_enc_a_gpio = PIN_ENCODER_RIGHT_A;
+    cfg.right_enc_b_gpio = PIN_ENCODER_RIGHT_B;
     cfg.left_enc_invert = false;
     cfg.right_enc_invert = false;
     cfg.ticks_per_meter = 2000.0f; /* CALIBRATE for your wheel + encoder */
@@ -133,6 +65,9 @@ chassis_config_t chassis_default_config(void)
 
     cfg.slew_us_per_s = 1500.0f;  /* ESC ramps ~1 full range per 0.33 s */
     cfg.failsafe_timeout_s = 0.3f;
+    cfg.encoder_stall_timeout_s = 0.6f;
+    cfg.encoder_min_command_mps = 0.12f;
+    cfg.encoder_min_feedback_mps = 0.01f;
     return cfg;
 }
 
@@ -180,14 +115,17 @@ static uint32_t pulse_us_to_duty(const chassis_t *ch, float pulse_us)
     return (uint32_t)(duty + 0.5f);
 }
 
-static void write_pulse(chassis_t *ch, int channel, float pulse_us)
+static esp_err_t write_pulse(chassis_t *ch, int channel, float pulse_us)
 {
     const chassis_config_t *cfg = &ch->cfg;
     const uint32_t duty = pulse_us_to_duty(ch, pulse_us);
-    ledc_set_duty((ledc_mode_t)cfg->ledc_speed_mode, (ledc_channel_t)channel,
-                  duty);
-    ledc_update_duty((ledc_mode_t)cfg->ledc_speed_mode,
-                     (ledc_channel_t)channel);
+    esp_err_t ret = ledc_set_duty((ledc_mode_t)cfg->ledc_speed_mode,
+                                  (ledc_channel_t)channel, duty);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    return ledc_update_duty((ledc_mode_t)cfg->ledc_speed_mode,
+                            (ledc_channel_t)channel);
 }
 
 static float slew(float target, float current, float max_step)
@@ -291,8 +229,14 @@ esp_err_t chassis_init(chassis_t *ch, const chassis_config_t *cfg)
     /* Hold neutral so the ESC can arm. */
     ch->cmd_pulse_l_us = (float)cfg->esc_mid_us;
     ch->cmd_pulse_r_us = (float)cfg->esc_mid_us;
-    write_pulse(ch, cfg->left_ledc_channel, ch->cmd_pulse_l_us);
-    write_pulse(ch, cfg->right_ledc_channel, ch->cmd_pulse_r_us);
+    ret = write_pulse(ch, cfg->left_ledc_channel, ch->cmd_pulse_l_us);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    ret = write_pulse(ch, cfg->right_ledc_channel, ch->cmd_pulse_r_us);
+    if (ret != ESP_OK) {
+        return ret;
+    }
 
     /* ---- Encoders ---- */
     esp_err_t isr_ret = gpio_install_isr_service(0);
@@ -339,6 +283,10 @@ esp_err_t chassis_set_wheel_speeds(chassis_t *ch, float left_mps,
     if (ch == NULL || !ch->initialized) {
         return ESP_ERR_INVALID_STATE;
     }
+    if (ch->encoder_fault_latched &&
+        (fabsf(left_mps) > 1e-4f || fabsf(right_mps) > 1e-4f)) {
+        return ESP_ERR_INVALID_STATE;
+    }
     const float vmax = ch->cfg.max_speed_mps;
     ch->target_left_mps = clampf(left_mps, -vmax, vmax);
     ch->target_right_mps = clampf(right_mps, -vmax, vmax);
@@ -370,9 +318,13 @@ esp_err_t chassis_set_pulse_us(chassis_t *ch, int left_us, int right_us)
     ch->cmd_pulse_r_us =
         clampf((float)right_us, (float)ch->cfg.esc_min_us,
                (float)ch->cfg.esc_max_us);
-    write_pulse(ch, ch->cfg.left_ledc_channel, ch->cmd_pulse_l_us);
-    write_pulse(ch, ch->cfg.right_ledc_channel, ch->cmd_pulse_r_us);
-    return ESP_OK;
+    esp_err_t ret = write_pulse(ch, ch->cfg.left_ledc_channel,
+                                ch->cmd_pulse_l_us);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    return write_pulse(ch, ch->cfg.right_ledc_channel,
+                       ch->cmd_pulse_r_us);
 }
 
 esp_err_t chassis_update(chassis_t *ch, float dt_s)
@@ -410,6 +362,27 @@ esp_err_t chassis_update(chassis_t *ch, float dt_s)
     const float right_dist = (float)dr / tpm;
     ch->meas_left_mps = left_dist / dt_s;
     ch->meas_right_mps = right_dist / dt_s;
+
+    const bool left_commanded =
+        fabsf(ch->target_left_mps) >= cfg->encoder_min_command_mps;
+    const bool right_commanded =
+        fabsf(ch->target_right_mps) >= cfg->encoder_min_command_mps;
+    ch->left_stall_s = left_commanded &&
+                               fabsf(ch->meas_left_mps) < cfg->encoder_min_feedback_mps
+                           ? ch->left_stall_s + dt_s
+                           : 0.0f;
+    ch->right_stall_s = right_commanded &&
+                                fabsf(ch->meas_right_mps) < cfg->encoder_min_feedback_mps
+                            ? ch->right_stall_s + dt_s
+                            : 0.0f;
+    if (ch->left_stall_s >= cfg->encoder_stall_timeout_s ||
+        ch->right_stall_s >= cfg->encoder_stall_timeout_s) {
+        ch->encoder_fault_latched = true;
+        esp_err_t stop_ret = chassis_emergency_stop(ch);
+        ESP_LOGE(TAG, "encoder feedback lost (left=%.2fs right=%.2fs)",
+                 ch->left_stall_s, ch->right_stall_s);
+        return stop_ret == ESP_OK ? ESP_ERR_INVALID_RESPONSE : stop_ret;
+    }
 
     /* Dead-reckoning odometry. */
     const double dc = 0.5 * ((double)left_dist + (double)right_dist);
@@ -450,9 +423,11 @@ esp_err_t chassis_update(chassis_t *ch, float dt_s)
     ch->cmd_pulse_l_us = pulse_l;
     ch->cmd_pulse_r_us = pulse_r;
 
-    write_pulse(ch, cfg->left_ledc_channel, pulse_l);
-    write_pulse(ch, cfg->right_ledc_channel, pulse_r);
-    return ESP_OK;
+    esp_err_t ret = write_pulse(ch, cfg->left_ledc_channel, pulse_l);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    return write_pulse(ch, cfg->right_ledc_channel, pulse_r);
 }
 
 void chassis_get_measured(chassis_t *ch, float *v_mps, float *omega_rps,
@@ -507,8 +482,42 @@ void chassis_stop(chassis_t *ch)
     chassis_pid_reset(&ch->pid_r);
     ch->cmd_pulse_l_us = (float)ch->cfg.esc_mid_us;
     ch->cmd_pulse_r_us = (float)ch->cfg.esc_mid_us;
-    write_pulse(ch, ch->cfg.left_ledc_channel, ch->cmd_pulse_l_us);
-    write_pulse(ch, ch->cfg.right_ledc_channel, ch->cmd_pulse_r_us);
+    esp_err_t ret = write_pulse(ch, ch->cfg.left_ledc_channel,
+                                ch->cmd_pulse_l_us);
+    if (ret == ESP_OK) {
+        ret = write_pulse(ch, ch->cfg.right_ledc_channel,
+                          ch->cmd_pulse_r_us);
+    }
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "failed to apply neutral pulse: %s",
+                 esp_err_to_name(ret));
+    }
+}
+
+esp_err_t chassis_emergency_stop(chassis_t *ch)
+{
+    if (ch == NULL || !ch->initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    ch->target_left_mps = 0.0f;
+    ch->target_right_mps = 0.0f;
+    ch->since_setpoint_s = 0.0f;
+    chassis_pid_reset(&ch->pid_l);
+    chassis_pid_reset(&ch->pid_r);
+    ch->cmd_pulse_l_us = (float)ch->cfg.esc_mid_us;
+    ch->cmd_pulse_r_us = (float)ch->cfg.esc_mid_us;
+    esp_err_t ret = write_pulse(ch, ch->cfg.left_ledc_channel,
+                                ch->cmd_pulse_l_us);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    return write_pulse(ch, ch->cfg.right_ledc_channel,
+                       ch->cmd_pulse_r_us);
+}
+
+bool chassis_encoder_faulted(const chassis_t *ch)
+{
+    return ch == NULL || ch->encoder_fault_latched;
 }
 
 void chassis_brake(chassis_t *ch)

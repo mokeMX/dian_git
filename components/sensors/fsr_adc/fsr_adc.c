@@ -4,6 +4,7 @@
 
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
+#include "board_pin_config.h"
 
 static const char *TAG = "fsr_adc";
 static fsr_adc_config_t s_config;
@@ -13,8 +14,8 @@ static bool s_initialized;
 fsr_adc_config_t fsr_adc_default_config(void)
 {
     fsr_adc_config_t config = {
-        .adc_gpio = 8,
-        .adc_channel = 7,
+        .adc_gpio = PIN_FSR_ADC,
+        .adc_channel = FSR_ADC_CHANNEL,
         .atten = ADC_ATTEN_DB_12,
         .sample_count = 10,
         .reference_voltage_v = 3.3f,
@@ -28,38 +29,6 @@ fsr_adc_config_t fsr_adc_default_config(void)
     return config;
 }
 
-float fsr_adc_raw_to_voltage(int raw, float reference_voltage_v)
-{
-    if (raw < 0) {
-        raw = 0;
-    }
-    if (raw > 4095) {
-        raw = 4095;
-    }
-    if (reference_voltage_v <= 0.0f) {
-        reference_voltage_v = 3.3f;
-    }
-    return ((float)raw * reference_voltage_v) / 4095.0f;
-}
-
-float fsr_adc_voltage_to_weight_kg(float voltage_v,
-                                   const fsr_adc_calibration_t *calibration)
-{
-    if (calibration == NULL || calibration->slope_v_per_kg <= 0.0f) {
-        return 0.0f;
-    }
-
-    float weight_kg = (voltage_v - calibration->offset_v) /
-                      calibration->slope_v_per_kg;
-    if (weight_kg < calibration->min_kg) {
-        weight_kg = calibration->min_kg;
-    }
-    if (weight_kg > calibration->max_kg) {
-        weight_kg = calibration->max_kg;
-    }
-    return weight_kg;
-}
-
 esp_err_t fsr_adc_init(const fsr_adc_config_t *config)
 {
     if (config == NULL || config->sample_count <= 0) {
@@ -68,7 +37,7 @@ esp_err_t fsr_adc_init(const fsr_adc_config_t *config)
 
     s_config = *config;
     const adc_oneshot_unit_init_cfg_t unit_cfg = {
-        .unit_id = ADC_UNIT_1,
+        .unit_id = FSR_ADC_UNIT,
     };
     esp_err_t ret = adc_oneshot_new_unit(&unit_cfg, &s_adc_handle);
     if (ret != ESP_OK) {

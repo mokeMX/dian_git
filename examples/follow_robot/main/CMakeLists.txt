@@ -3,12 +3,13 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         a02yyuw
+        board
         bu_uwb
+        fsr_adc
         rplidar_c1
-        imu_i2c
         chassis
         follow_avoid
-        esp_driver_i2c
+        web_control
         esp_timer
         esp_driver_ledc
         esp_driver_gpio

@@ -7,11 +7,10 @@
 #include "driver/uart.h"
 #include "esp_err.h"
 #include "sw_uart.h"
+#include "a02yyuw_parser.h"
 
 #define A02YYUW_DEFAULT_BAUDRATE 9600
 #define A02YYUW_DEFAULT_RX_BUF_SIZE 512
-#define A02YYUW_MIN_DISTANCE_MM 30
-#define A02YYUW_MAX_DISTANCE_MM 4500
 
 typedef struct {
     uart_port_t uart_port;
@@ -22,20 +21,10 @@ typedef struct {
     bool use_sw_uart;
 } a02yyuw_config_t;
 
-typedef struct {
-    int distance_mm;
-    bool valid;
-} a02yyuw_reading_t;
 
 a02yyuw_config_t a02yyuw_default_config(uart_port_t uart_port,
                                         int rx_gpio,
                                         int tx_gpio);
-bool a02yyuw_parse_frame(const uint8_t *frame,
-                         size_t len,
-                         a02yyuw_reading_t *out);
-bool a02yyuw_parse_latest(const uint8_t *buf,
-                          size_t len,
-                          a02yyuw_reading_t *out);
 
 /* --- Single-instance (legacy) API -----------------------------------------
  * Kept for backward compatibility. Internally it drives a single static

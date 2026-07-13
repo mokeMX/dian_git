@@ -71,6 +71,46 @@ config FOLLOW_ROBOT_CONTROL_HZ
     default 50
     range 20 100
 
+comment "FSR force sensor calibration"
+
+config FOLLOW_ROBOT_FSR_SAMPLE_COUNT
+    int "ADC oversampling count"
+    default 10
+    range 1 100
+    help
+        Number of ADC readings averaged per FSR sample.
+
+config FOLLOW_ROBOT_FSR_REFERENCE_MV
+    int "ADC reference voltage (mV)"
+    default 3300
+    range 2500 5000
+    help
+        Board ADC reference voltage in millivolts (typ. 3300).
+
+config FOLLOW_ROBOT_FSR_SLOPE_UV_PER_KG
+    int "Calibration slope (µV/kg)"
+    default 400
+    help
+        Voltage change per kg applied force, in µV/kg.
+
+config FOLLOW_ROBOT_FSR_OFFSET_UV
+    int "Calibration offset (µV)"
+    default 74900
+    help
+        Zero-force voltage offset in microvolts.
+
+config FOLLOW_ROBOT_FSR_MIN_KG
+    int "Clamp minimum (kg × 100)"
+    default 0
+    help
+        Minimum reportable weight, stored as kg × 100.
+
+config FOLLOW_ROBOT_FSR_MAX_KG
+    int "Clamp maximum (kg × 100)"
+    default 600
+    help
+        Maximum reportable weight, stored as kg × 100 (600 = 6.00 kg).
+
 comment "Web control safety gate"
 
 config FOLLOW_ROBOT_WEB_AP_SSID

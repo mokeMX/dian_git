@@ -52,6 +52,8 @@ typedef struct {
     float ultrasonic_right_m;
     uint64_t ultrasonic_right_timestamp_us;
     float fsr_voltage_v;
+    float fsr_weight_kg;
+    int fsr_raw;
     uint64_t fsr_timestamp_us;
 } sensor_snapshot_t;
 
@@ -150,6 +152,16 @@ static void lidar_task(void *argument)
             vTaskDelay(pdMS_TO_TICKS(1));
             continue;
         }
+        const bool angle_valid =
+            point.angle_deg >= 0.0f && point.angle_deg < 360.0f;
+        const bool distance_valid =
+            point.distance_mm > 0.0f && point.distance_mm <= 12000.0f;
+        const bool quality_valid = point.quality > 0;
+
+        if (!angle_valid || !distance_valid || !quality_valid) {
+            continue;
+        }
+
         if (point.start_bit) {
             sensors_lock();
             s_sensors.field = working;
@@ -159,8 +171,7 @@ static void lidar_task(void *argument)
         }
         const bool in_front = point.angle_deg <= LIDAR_FRONT_MAX_DEG;
         const bool in_other_front = point.angle_deg >= LIDAR_FRONT_MIN_DEG;
-        if (point.distance_mm > 0.0f && point.quality > 0 &&
-            (in_front || in_other_front)) {
+        if (in_front || in_other_front) {
             fa_obstacle_add(&working, lidar_body_angle_rad(point.angle_deg),
                             point.distance_mm / 1000.0f);
         }
@@ -196,9 +207,13 @@ static void fsr_task(void *argument)
         esp_err_t ret = fsr_adc_read(&reading);
         if (ret == ESP_OK && reading.valid) {
             sensors_lock();
+            s_sensors.fsr_raw = reading.raw;
             s_sensors.fsr_voltage_v = reading.voltage_v;
+            s_sensors.fsr_weight_kg = reading.weight_kg;
             s_sensors.fsr_timestamp_us = now_us();
             sensors_unlock();
+        } else if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "FSR read failed: %s", esp_err_to_name(ret));
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -253,6 +268,22 @@ static chassis_config_t chassis_config(void)
     return config;
 }
 
+static fsr_adc_config_t fsr_config(void)
+{
+    fsr_adc_config_t config = fsr_adc_default_config();
+    config.sample_count = CONFIG_FOLLOW_ROBOT_FSR_SAMPLE_COUNT;
+    config.reference_voltage_v = (float)CONFIG_FOLLOW_ROBOT_FSR_REFERENCE_MV / 1000.0f;
+    config.calibration.slope_v_per_kg =
+        (float)CONFIG_FOLLOW_ROBOT_FSR_SLOPE_UV_PER_KG / 1000000.0f;
+    config.calibration.offset_v =
+        (float)CONFIG_FOLLOW_ROBOT_FSR_OFFSET_UV / 1000000.0f;
+    config.calibration.min_kg =
+        (float)CONFIG_FOLLOW_ROBOT_FSR_MIN_KG / 100.0f;
+    config.calibration.max_kg =
+        (float)CONFIG_FOLLOW_ROBOT_FSR_MAX_KG / 100.0f;
+    return config;
+}
+
 static const char *follow_state_name(fa_state_t state)
 {
     switch (state) {
@@ -288,6 +319,8 @@ static void control_task(void *argument)
         fa_range_t ultrasonic_left = {0};
         fa_range_t ultrasonic_right = {0};
         float fsr_voltage_v;
+        float fsr_weight_kg;
+        int fsr_raw;
         uint64_t fsr_timestamp_us;
         uint64_t ultrasonic_left_timestamp_us;
         uint64_t ultrasonic_right_timestamp_us;
@@ -308,6 +341,8 @@ static void control_task(void *argument)
         ultrasonic_right.dist_m = s_sensors.ultrasonic_right_m;
         ultrasonic_right_timestamp_us = s_sensors.ultrasonic_right_timestamp_us;
         fsr_voltage_v = s_sensors.fsr_voltage_v;
+        fsr_weight_kg = s_sensors.fsr_weight_kg;
+        fsr_raw = s_sensors.fsr_raw;
         fsr_timestamp_us = s_sensors.fsr_timestamp_us;
         sensors_unlock();
 
@@ -374,6 +409,8 @@ static void control_task(void *argument)
             .target_bearing_rad = target.bearing_rad,
             .front_clearance_m = output.front_clearance_m,
             .fsr_voltage_v = fsr_voltage_v,
+            .fsr_weight_kg = fsr_weight_kg,
+            .fsr_raw = fsr_raw,
             .measured_linear_mps = measured_v,
             .measured_angular_rps = measured_w,
             .left_pulse_us = (int)chassis->cmd_pulse_l_us,
@@ -441,13 +478,55 @@ void app_main(void)
     rplidar_c1_config_t lidar = rplidar_c1_default_config(
         RPLIDAR_UART_PORT, PIN_RPLIDAR_RX, PIN_RPLIDAR_TX);
     lidar.baudrate = RPLIDAR_BAUD_RATE;
+    if (lidar.rx_buffer_size < 4096) {
+        lidar.rx_buffer_size = 4096;
+    }
     ret = rplidar_c1_init(&s_lidar, &lidar);
-    if (ret == ESP_OK) ret = rplidar_c1_start_scan(&s_lidar);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "RPLIDAR init failed: %s", esp_err_to_name(ret));
+        goto skip_lidar;
+    }
+    ESP_LOGI(TAG, "RPLIDAR UART initialized: UART%d, TX=%d, RX=%d, baud=%d",
+             (int)RPLIDAR_UART_PORT, PIN_RPLIDAR_TX, PIN_RPLIDAR_RX, lidar.baudrate);
+
+    rplidar_c1_stop(&s_lidar);
+    rplidar_c1_reset(&s_lidar);
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    uint8_t health_status = 0;
+    uint16_t health_error = 0;
+    ret = rplidar_c1_get_health(&s_lidar, &health_status, &health_error);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "RPLIDAR health: status=%u, error_code=0x%04X",
+                 (unsigned)health_status, (unsigned)health_error);
+        if (health_status == 2) {
+            ESP_LOGE(TAG, "RPLIDAR health error, aborting lidar");
+            rplidar_c1_deinit(&s_lidar);
+            goto skip_lidar;
+        }
+    } else {
+        ESP_LOGW(TAG, "RPLIDAR health check failed: %s", esp_err_to_name(ret));
+    }
+
+    rplidar_c1_info_t lidar_info = {0};
+    ret = rplidar_c1_get_info(&s_lidar, &lidar_info);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "RPLIDAR device: model=%u.%u, fw=%u.%u, hw=%u, SN=%s",
+                 (unsigned)lidar_info.major_model, (unsigned)lidar_info.sub_model,
+                 (unsigned)lidar_info.firmware_major, (unsigned)lidar_info.firmware_minor,
+                 (unsigned)lidar_info.hardware, lidar_info.serial_num);
+    } else {
+        ESP_LOGW(TAG, "RPLIDAR device info unavailable: %s", esp_err_to_name(ret));
+    }
+
+    ret = rplidar_c1_start_scan(&s_lidar);
     if (ret == ESP_OK) {
         start_task(lidar_task, "lidar", 4096, &s_lidar, 6);
     } else {
-        ESP_LOGE(TAG, "RPLIDAR init failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "RPLIDAR start scan failed: %s", esp_err_to_name(ret));
+        rplidar_c1_deinit(&s_lidar);
     }
+skip_lidar:;
 
     a02yyuw_config_t ultrasonic_left = a02yyuw_default_config(
         UART_NUM_0, PIN_ULTRASONIC_LEFT_RX, -1);
@@ -473,7 +552,13 @@ void app_main(void)
         ESP_LOGE(TAG, "right ultrasonic init failed: %s", esp_err_to_name(ret));
     }
 
-    fsr_adc_config_t fsr = fsr_adc_default_config();
+    fsr_adc_config_t fsr = fsr_config();
+    ESP_LOGI(TAG, "FSR config: GPIO%d ch=%d samples=%d ref=%.2fV slope=%.1fuV/kg offset=%.1fuV clamp=[%.1f,%.1f]kg",
+             fsr.adc_gpio, (int)fsr.adc_channel, fsr.sample_count,
+             fsr.reference_voltage_v,
+             fsr.calibration.slope_v_per_kg * 1000000.0f,
+             fsr.calibration.offset_v * 1000000.0f,
+             fsr.calibration.min_kg, fsr.calibration.max_kg);
     ret = fsr_adc_init(&fsr);
     if (ret == ESP_OK) {
         start_task(fsr_task, "fsr", 3072, NULL, 3);

@@ -151,7 +151,14 @@ esp_err_t sw_uart_init(sw_uart_t *uart, const sw_uart_config_t *config)
     ret = gpio_config(&gpio_cfg);
     if (ret != ESP_OK) goto err_timer;
     
-    gpio_install_isr_service(0);
+    /* gpio_install_isr_service is not ref-counted: if chassis or another
+     * sensor already installed it, the call returns ESP_ERR_INVALID_STATE.
+     * That is expected and harmless — treat it as success. */
+    esp_err_t isr_ret = gpio_install_isr_service(0);
+    if (isr_ret != ESP_OK && isr_ret != ESP_ERR_INVALID_STATE) {
+        ret = isr_ret;
+        goto err_timer;
+    }
     ret = gpio_isr_handler_add(uart->rx_gpio, sw_uart_gpio_isr, uart);
     if (ret != ESP_OK) goto err_timer;
     
@@ -159,6 +166,7 @@ esp_err_t sw_uart_init(sw_uart_t *uart, const sw_uart_config_t *config)
     return ESP_OK;
 
 err_timer:
+    gptimer_disable(uart->timer);
     gptimer_del_timer(uart->timer);
     return ret;
 }
@@ -207,6 +215,9 @@ void sw_uart_deinit(sw_uart_t *uart)
 {
     if (!uart || !uart->initialized) return;
     gpio_isr_handler_remove(uart->rx_gpio);
+    /* 定时器可能处于任意状态（IDLE 时未启动，或正在回调中运行）。
+     * 按顺序安全拆卸：stop → disable → delete，忽略每步的状态错误。 */
+    gptimer_stop(uart->timer);
     gptimer_disable(uart->timer);
     gptimer_del_timer(uart->timer);
     gpio_reset_pin(uart->rx_gpio);

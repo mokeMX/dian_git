@@ -9,10 +9,10 @@ set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/components/control/chassis"
     "${CMAKE_CURRENT_LIST_DIR}/components/control/follow_avoid"
     "${CMAKE_CURRENT_LIST_DIR}/components/control/web_control"
-    "${CMAKE_CURRENT_LIST_DIR}/examples/follow_robot/main"
+    "${CMAKE_CURRENT_LIST_DIR}/examples/sensor_check/main"
 )
 
 set(COMPONENTS main)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(follow_robot)
+project(sensor_check)

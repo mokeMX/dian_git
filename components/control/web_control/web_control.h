@@ -39,6 +39,8 @@ typedef struct {
     float target_bearing_rad;
     float front_clearance_m;
     float fsr_voltage_v;
+    float fsr_weight_kg;
+    int fsr_raw;
     float measured_linear_mps;
     float measured_angular_rps;
     int left_pulse_us;

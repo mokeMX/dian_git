@@ -215,7 +215,7 @@ static esp_err_t status_handler(httpd_req_t *request)
         "\"state\":\"%s\",\"uwb\":%s,\"lidar\":%s,\"ultra_left\":%s,"
         "\"ultra_right\":%s,\"fsr\":%s,\"encoder\":%s,"
         "\"target_m\":%.3f,\"bearing_rad\":%.3f,\"clearance_m\":%.3f,"
-        "\"fsr_v\":%.3f,\"measured_v\":%.3f,\"measured_w\":%.3f,"
+        "\"fsr_v\":%.3f,\"fsr_kg\":%.3f,\"fsr_raw\":%d,\"measured_v\":%.3f,\"measured_w\":%.3f,"
         "\"left_us\":%d,\"right_us\":%d}",
         command.mode == WEB_CONTROL_MODE_AUTO ? "auto" : "manual",
         command.estop_latched ? "true" : "false",
@@ -230,6 +230,7 @@ static esp_err_t status_handler(httpd_req_t *request)
         telemetry.encoder_ok ? "true" : "false",
         telemetry.target_distance_m, telemetry.target_bearing_rad,
         telemetry.front_clearance_m, telemetry.fsr_voltage_v,
+        telemetry.fsr_weight_kg, telemetry.fsr_raw,
         telemetry.measured_linear_mps, telemetry.measured_angular_rps,
         telemetry.left_pulse_us, telemetry.right_pulse_us);
     if (length < 0 || length >= (int)sizeof(json)) {

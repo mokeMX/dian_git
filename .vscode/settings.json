@@ -3,10 +3,10 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
-    "--compile-commands-dir=${workspaceFolder}\\build"
+    "--compile-commands-dir=c:\\Users\\30280\\Desktop\\dian_git\\build"
   ],
   "idf.flashType": "UART",
-  "idf.portWin": "COM35",
+  "idf.portWin": "COM45",
   "idf.currentSetup": "D:/Espressif/frameworks/esp-idf-v5.4/",
   "idf.adapterTargetName": "esp32s3",
   "idf.buildPathWin": "${workspaceFolder}\\build"
